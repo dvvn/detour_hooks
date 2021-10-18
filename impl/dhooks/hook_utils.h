@@ -3,6 +3,7 @@
 #include "hook.h"
 
 #include <nstd/address.h>
+#include <nstd/runtime_assert_fwd.h>
 
 #include <intrin.h>
 
@@ -38,7 +39,7 @@ namespace dhooks
 	{
 		uintptr_t value;
 
-		hiddent_type() = default;
+		hiddent_type( ) = default;
 
 		hiddent_type(void* ptr)
 			: value(reinterpret_cast<uintptr_t>(ptr))
@@ -46,14 +47,14 @@ namespace dhooks
 		}
 
 		template <typename T1>
-		hiddent_type<T1> change_type() const
+		hiddent_type<T1> change_type( ) const
 		{
 			hiddent_type<T1> ret;
 			ret.value = value;
 			return ret;
 		}
 
-		decltype(auto) unhide()
+		decltype(auto) unhide( )
 		{
 			if constexpr (std::is_pointer_v<T>)
 				return reinterpret_cast<T>(value);
@@ -125,28 +126,28 @@ namespace dhooks
 	template <typename Ret, typename C, typename ...Args>
 	struct hook_callback<Ret, call_conversion::thiscall__, C, Args...>
 	{
-		virtual ~hook_callback() = default;
+		virtual ~hook_callback( ) = default;
 		virtual Ret __thiscall callback_proxy(hiddent_type<Args> ...) = 0;
 	};
 
 	template <typename Ret, typename C, typename ...Args>
 	struct hook_callback<Ret, call_conversion::fastcall__, C, Args...>
 	{
-		virtual ~hook_callback() = default;
+		virtual ~hook_callback( ) = default;
 		virtual Ret __fastcall callback_proxy(hiddent_type<Args> ...) = 0;
 	};
 
 	template <typename Ret, typename C, typename ...Args>
 	struct hook_callback<Ret, call_conversion::stdcall__, C, Args...>
 	{
-		virtual ~hook_callback() = default;
+		virtual ~hook_callback( ) = default;
 		virtual Ret __stdcall callback_proxy(hiddent_type<Args> ...) = 0;
 	};
 
 	template <typename Ret, typename C, typename ...Args>
 	struct hook_callback<Ret, call_conversion::cdecl__, C, Args...>
 	{
-		virtual ~hook_callback() = default;
+		virtual ~hook_callback( ) = default;
 		virtual Ret __cdecl callback_proxy(hiddent_type<Args> ...) = 0;
 	};
 
@@ -343,24 +344,24 @@ namespace dhooks
 	class __declspec(novtable) hook_holder_base
 	{
 	protected:
-		virtual ~hook_holder_base() = default;
+		virtual ~hook_holder_base( ) = default;
 
 	public:
-		virtual bool hook() = 0;
-		virtual bool unhook() = 0;
-		virtual void unhook_after_call() = 0;
+		virtual bool hook( ) = 0;
+		virtual bool unhook( ) = 0;
+		virtual void unhook_after_call( ) = 0;
 
-		virtual bool enable() = 0;
-		virtual bool disable() = 0;
-		virtual void disable_after_call() = 0;
+		virtual bool enable( ) = 0;
+		virtual bool disable( ) = 0;
+		virtual void disable_after_call( ) = 0;
 
-		virtual bool hooked() const = 0;
-		virtual bool enabled() const = 0;
+		virtual bool hooked( ) const = 0;
+		virtual bool enabled( ) const = 0;
 	};
 
 	namespace detail
 	{
-#define CHEAT_HOOKS_CALL_CVS_HELPER(_MACRO_)\
+#define DHOOKS_CALL_CVS_HELPER(_MACRO_)\
 		_MACRO_(thiscall)\
 		_MACRO_(cdecl)\
 		_MACRO_(stdcall)\
@@ -397,12 +398,12 @@ namespace dhooks
 			}\
 		};
 
-		CHEAT_HOOKS_CALL_CVS_HELPER(CHEAT_HOOK_ORIGINAL_FN)
+		DHOOKS_CALL_CVS_HELPER(CHEAT_HOOK_ORIGINAL_FN)
 
 		template <typename Ret, typename Arg1, typename ...Args>
 		struct __declspec(novtable) hook_callback
 		{
-			virtual ~hook_callback() = default;
+			virtual ~hook_callback( ) = default;
 			virtual void callback(Args ...) = 0;
 		};
 
@@ -419,17 +420,17 @@ namespace dhooks
 				value_.emplace(Ret(std::forward<T>(val)));
 			}
 
-			void reset()
+			void reset( )
 			{
 				value_.reset( );
 			}
 
-			bool empty() const
+			bool empty( ) const
 			{
 				return !value_.has_value( );
 			}
 
-			Ret get()
+			Ret get( )
 			{
 				if constexpr (std::is_copy_constructible_v<Ret>)
 					return *value_;
@@ -453,17 +454,17 @@ namespace dhooks
 				skip_original__ = called;
 			}
 
-			void reset()
+			void reset( )
 			{
 				skip_original__ = false;
 			}
 
-			bool empty() const
+			bool empty( ) const
 			{
 				return skip_original__ == false;
 			}
 
-			void get() { (void)this; }
+			void get( ) { (void)this; }
 		};
 
 		struct hook_holder_data
@@ -477,7 +478,6 @@ namespace dhooks
 			{
 				bool unhook  = false;
 				bool disable = false;
-				//-
 			} after_call;
 
 			std::optional<void*> return_address;
@@ -487,18 +487,18 @@ namespace dhooks
 		class __declspec(novtable) method_info
 		{
 		protected:
-			virtual ~method_info() = default;
+			virtual ~method_info( ) = default;
 
-			virtual nstd::address get_target_method_impl() const = 0;
+			virtual nstd::address get_target_method_impl( ) const = 0;
 
 		private:
 			nstd::address target_method_;
 
 		public:
-			nstd::address get_target_method();
-			nstd::address get_target_method() const;
+			nstd::address get_target_method( );
+			nstd::address get_target_method( ) const;
 
-			virtual nstd::address get_replace_method() = 0;
+			virtual nstd::address get_replace_method( ) = 0;
 		};
 
 		template <typename Ret, call_conversion CallCvs, typename Arg1, typename ...Args>
@@ -512,7 +512,7 @@ namespace dhooks
 			hook_holder_data data_ = {};
 
 		protected:
-			static hook_holder_impl*& instance()
+			static hook_holder_impl*& instance( )
 			{
 				static hook_holder_impl* obj;
 				return obj;
@@ -521,10 +521,10 @@ namespace dhooks
 			lazy_return_value<Ret> return_value_;
 
 		public:
-			std::optional<void*>& get_return_address() { return data_.return_address; }
-			std::optional<void*>& get_address_of_return_address() { return data_.address_of_return_address; }
+			std::optional<void*>& get_return_address( ) { return data_.return_address; }
+			std::optional<void*>& get_address_of_return_address( ) { return data_.address_of_return_address; }
 
-			~hook_holder_impl() override
+			~hook_holder_impl( ) override
 			{
 				if (!data_.active)
 					return;
@@ -532,7 +532,7 @@ namespace dhooks
 				this->unhook( );
 			}
 
-			bool hook() final
+			bool hook( ) final
 			{
 				const auto lock = std::scoped_lock(data_.lock);
 
@@ -563,7 +563,7 @@ namespace dhooks
 				return true;
 			}
 
-			bool unhook() final
+			bool unhook( ) final
 			{
 				if (!data_.active)
 					return false;
@@ -583,12 +583,12 @@ namespace dhooks
 				return ok;
 			}
 
-			void unhook_after_call() final
+			void unhook_after_call( ) final
 			{
 				data_.after_call.unhook = true;
 			}
 
-			bool enable() final
+			bool enable( ) final
 			{
 				if (!data_.active)
 					return false;
@@ -601,7 +601,7 @@ namespace dhooks
 				return (ctx.enable_hook(target_func) == hook_status::OK);
 			}
 
-			bool disable() final
+			bool disable( ) final
 			{
 				if (!data_.active)
 					return false;
@@ -617,12 +617,12 @@ namespace dhooks
 				return ret;
 			}
 
-			void disable_after_call() final
+			void disable_after_call( ) final
 			{
 				data_.after_call.disable = true;
 			}
 
-			bool hooked() const final
+			bool hooked( ) const final
 			{
 				if (!data_.active)
 					return false;
@@ -634,7 +634,7 @@ namespace dhooks
 				return ctx.find_hook(target_func).status == hook_status::OK;
 			}
 
-			bool enabled() const final
+			bool enabled( ) const final
 			{
 				if (!data_.active)
 					return false;
@@ -684,7 +684,7 @@ namespace dhooks
 		};
 	}
 
-	template <typename Ret, call_conversion CallCvs, typename Arg1, typename ...Args>
+	template <size_t Idx, typename Ret, call_conversion CallCvs, typename Arg1, typename ...Args>
 	struct hook_holder;
 
 	namespace detail
@@ -692,11 +692,7 @@ namespace dhooks
 		template <typename T, size_t ...I>
 		auto shift_left_impl(T& tpl, std::index_sequence<I...>)
 		{
-			return std::forward_as_tuple
-					(
-							reinterpret_cast<std::tuple_element_t<I + 1, T>&>(std::get<I>(tpl))
-						   .unhide( )...
-							);
+			return std::forward_as_tuple(reinterpret_cast<std::tuple_element_t<I + 1, T>&>(std::get<I>(tpl)).unhide( )...);
 		}
 
 		template <typename ...T>
@@ -707,12 +703,12 @@ namespace dhooks
 	}
 
 #define CHEAT_HOOK_HOLDER_IMPL(_CALL_CVS_)\
-	template <typename Ret, typename Arg1, typename ...Args>\
-	struct hook_holder<Ret,  call_conversion::_CALL_CVS_##__, Arg1, Args...>:\
-						detail::hook_holder_impl<Ret,  call_conversion::_CALL_CVS_##__, Arg1, Args...>\
+	template <size_t Idx, typename Ret, typename Arg1, typename ...Args>\
+	struct hook_holder<Idx, Ret, call_conversion::_CALL_CVS_##__, Arg1, Args...>:\
+						detail::hook_holder_impl<Ret, call_conversion::_CALL_CVS_##__, Arg1, Args...>\
 	{\
 	private:\
-		Ret __##_CALL_CVS_ callback_proxy(hiddent_type<Args> ...args)\
+		_declspec(noinline) Ret __##_CALL_CVS_ callback_proxy(hiddent_type<Args> ...args)\
 		{\
 			auto _Instance = this->instance();\
 			auto &ra1=_Instance->get_return_address();\
@@ -751,24 +747,24 @@ namespace dhooks
 		}\
 	};
 
-	CHEAT_HOOKS_CALL_CVS_HELPER(CHEAT_HOOK_HOLDER_IMPL)
+	DHOOKS_CALL_CVS_HELPER(CHEAT_HOOK_HOLDER_IMPL)
 
 #define CHEAT_HOOK_HOLDER_DETECTOR(_CALL_CVS_)\
-	template <typename Ret, typename C, typename ...Args>\
-    auto _Detect_hook_holder(Ret (__##_CALL_CVS_ C::*fn)(Args ...))		  -> hook_holder<Ret, call_conversion::_CALL_CVS_##__, C, /*false,*/ Args...>\
-        { return {}; }\
-    template <typename Ret, typename C, typename ...Args>\
-    auto _Detect_hook_holder(Ret (__##_CALL_CVS_ C::*fn)(Args ...) const) -> hook_holder<Ret, call_conversion::_CALL_CVS_##__, C, /*true,*/ Args...>\
-        { return {}; }\
-    template <typename Ret, typename ...Args>\
-    auto _Detect_hook_holder(Ret (__##_CALL_CVS_    *fn)(Args ...))		  -> hook_holder<Ret, call_conversion::_CALL_CVS_##__, void,/* false,*/ Args...>\
-        { return {}; }
+	template <size_t Idx,typename Ret, typename C, typename ...Args>\
+    auto _Detect_hook_holder(Ret (__##_CALL_CVS_ C::*fn)(Args ...), std::in_place_index_t<Idx>) ->\
+    hook_holder<Idx, Ret, call_conversion::_CALL_CVS_##__, C, /*false,*/ Args...>\
+    { return {}; }\
+    template <size_t Idx,typename Ret, typename C, typename ...Args>\
+    auto _Detect_hook_holder(Ret (__##_CALL_CVS_ C::*fn)(Args ...) const, std::in_place_index_t<Idx>) ->\
+    hook_holder<Idx, Ret, call_conversion::_CALL_CVS_##__, C, /*true,*/ Args...>\
+    { return {}; }\
+    template <size_t Idx,typename Ret, typename ...Args>\
+    auto _Detect_hook_holder(Ret (__##_CALL_CVS_    *fn)(Args ...), std::in_place_index_t<Idx>) ->\
+	hook_holder<Idx, Ret, call_conversion::_CALL_CVS_##__, void,/* false,*/ Args...>\
+    { return {}; }
 
-	namespace detail
-	{
-		CHEAT_HOOKS_CALL_CVS_HELPER(CHEAT_HOOK_HOLDER_DETECTOR)
-	}
+	DHOOKS_CALL_CVS_HELPER(CHEAT_HOOK_HOLDER_DETECTOR)
 
-	template <typename T>
-	using _Detect_hook_holder_t = decltype(detail::_Detect_hook_holder(std::declval<T>( )));
+#define DHOOKS_DETECT_HOOK_HOLDER(_SAMPLE_) \
+	decltype(dhooks::_Detect_hook_holder(_SAMPLE_,std::in_place_index<__COUNTER__>))
 }

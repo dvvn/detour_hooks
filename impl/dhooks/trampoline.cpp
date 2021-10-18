@@ -4,6 +4,7 @@
 
 #include <nstd/memory block.h>
 #include <nstd/memory protect.h>
+#include <nstd/runtime_assert_fwd.h>
 
 #include <Windows.h>
 

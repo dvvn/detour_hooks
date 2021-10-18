@@ -1,7 +1,7 @@
 #include "hook.h"
 
-#include "nstd/memory block.h"
-#include "nstd/runtime assert.h"
+#include <nstd/memory block.h>
+#include <nstd/runtime_assert_fwd.h>
 
 #include <Windows.h>
 
@@ -253,7 +253,7 @@ hook_status hook_entry::set_state(bool enable)
 		auto again = false;
 		(void)again;
 	_TRY_AGAIN:
-		_try
+		__try
 		{
 			const auto jmp_rel = reinterpret_cast<JMP_REL*>(patch_target);
 			jmp_rel->opcode    = 0xE9;
@@ -265,7 +265,7 @@ hook_status hook_entry::set_state(bool enable)
 				short_jmp->operand   = static_cast<UINT8>(0 - (sizeof(JMP_REL_SHORT) + sizeof(JMP_REL)));
 			}
 		}
-		_except (EXCEPTION_EXECUTE_HANDLER)
+		__except (EXCEPTION_EXECUTE_HANDLER)
 		{
 			DWORD dummy;
 			if (again || !VirtualProtect(patch_target, patch_size, PAGE_EXECUTE_READWRITE, &dummy))

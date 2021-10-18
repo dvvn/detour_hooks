@@ -1,6 +1,6 @@
 #include "status.h"
 
-#include "nstd/runtime assert.h"
+#include <nstd/runtime_assert_fwd.h>
 
 #include <array>
 #include <ranges>
@@ -9,7 +9,7 @@ using namespace dhooks;
 
 static constexpr auto _Status_to_string_cache = []
 {
-	using hook_status_raw=std::underlying_type_t<hook_status>;
+	using hook_status_raw = std::underlying_type_t<hook_status>;
 
 #define STATUS_STR(x) data[static_cast<hook_status_raw>(hook_status::x)].first = /*CRYPT_STR*/(#x);
 
@@ -39,7 +39,7 @@ static constexpr auto _Status_to_string_cache = []
 #undef STATUS_STR
 
 #ifdef _DEBUG
-	for (const auto& key: data | std::ranges::views::keys)
+	for (const auto& key : data | std::ranges::views::keys)
 	{
 		if (key == std::remove_cvref_t<decltype(key)>( ))
 		{
@@ -56,9 +56,7 @@ static constexpr auto _Status_to_string_cache = []
 	return data;
 }( );
 
-
-
-std::string_view dhooks::hook_status_to_string(hook_status status )
+std::string_view dhooks::hook_status_to_string(hook_status status)
 {
 	try
 	{
