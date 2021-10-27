@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hook.h"
+#include "helpers.h"
 
 #include <nstd/address.h>
 #include <nstd/runtime_assert_fwd.h>
@@ -11,28 +12,8 @@
 
 namespace dhooks
 {
-	template <typename C>
-	LPVOID* _Pointer_to_virtual_class_table(C* instance)
-	{
-		return *(LPVOID**)instance;
-	}
-
-	// ReSharper disable CppInconsistentNaming
-	enum class call_conversion
-	{
-		thiscall__
-	  , cdecl__
-	  , stdcall__
-	  , vectorcall__
-	  , fastcall__
-	};
-
-	// ReSharper restore CppInconsistentNaming
-
 	template <typename Ret, call_conversion CallCvs, typename C/*, bool Is_const*/, typename ...Args>
 	struct hook_callback;
-
-#pragma region call_cvs_1
 
 	template <typename T>
 	struct hiddent_type
@@ -65,64 +46,6 @@ namespace dhooks
 		}
 	};
 
-	namespace detail
-	{
-		template <typename Fn>
-		LPVOID _Ptr_to_fn(Fn fn)
-		{
-			const auto ptr = reinterpret_cast<void*&>(fn);
-			return ptr;
-		}
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	LPVOID _Pointer_to_class_method(Ret (__thiscall C::*fn)(Args ...))
-	{
-		return detail::_Ptr_to_fn(fn);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	LPVOID _Pointer_to_class_method(Ret (__thiscall C::*fn)(Args ...) const)
-	{
-		return detail::_Ptr_to_fn(fn);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	LPVOID _Pointer_to_class_method(Ret (__fastcall C::*fn)(Args ...))
-	{
-		return detail::_Ptr_to_fn(fn);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	LPVOID _Pointer_to_class_method(Ret (__fastcall C::*fn)(Args ...) const)
-	{
-		return detail::_Ptr_to_fn(fn);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	LPVOID _Pointer_to_class_method(Ret (__stdcall C::*fn)(Args ...))
-	{
-		return detail::_Ptr_to_fn(fn);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	LPVOID _Pointer_to_class_method(Ret (__stdcall C::*fn)(Args ...) const)
-	{
-		return detail::_Ptr_to_fn(fn);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	LPVOID _Pointer_to_class_method(Ret (__cdecl C::*fn)(Args ...))
-	{
-		return detail::_Ptr_to_fn(fn);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	LPVOID _Pointer_to_class_method(Ret (__cdecl C::*fn)(Args ...) const)
-	{
-		return detail::_Ptr_to_fn(fn);
-	}
-
 	template <typename Ret, typename C, typename ...Args>
 	struct hook_callback<Ret, call_conversion::thiscall__, C, Args...>
 	{
@@ -150,197 +73,7 @@ namespace dhooks
 		virtual ~hook_callback( ) = default;
 		virtual Ret __cdecl callback_proxy(hiddent_type<Args> ...) = 0;
 	};
-
-	namespace detail
-	{
-		void _Call_fn_trap([[maybe_unused]] call_conversion original, [[maybe_unused]] call_conversion called);
-
-		void _Call_fn_trap([[maybe_unused]] call_conversion original);
-
-		template <typename Fn_as, typename Fn_old, typename ...Args>
-		decltype(auto) _Call_fn_as(Fn_old func_ptr, Args&& ...args)
-		{
-			Fn_as callable;
-			reinterpret_cast<void*&>(callable) = reinterpret_cast<void*&>(func_ptr);
-			return std::invoke(callable, std::forward<Args>(args)...);
-		}
-	}
-
-	/**
-	 * \brief thiscall -> fastcall
-	 */
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__thiscall C::*fn)(Args ...), C* instance, std::type_identity_t<Args> ...args)
-	{
-		detail::_Call_fn_trap(call_conversion::thiscall__, call_conversion::fastcall__);
-		using fn_t = Ret(__fastcall*)(C*, void*, Args ...);
-		return detail::_Call_fn_as<fn_t>(fn, instance, nullptr, args...);
-	}
-
-	/**
-	 * \brief thiscall -> fastcall CONST
-	 */
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__thiscall C::*fn)(Args ...) const, const C* instance, std::type_identity_t<Args> ...args)
-	{
-		detail::_Call_fn_trap(call_conversion::thiscall__, call_conversion::fastcall__);
-		using fn_t = Ret(__fastcall*)(const C*, void*, Args ...);
-		return detail::_Call_fn_as<fn_t>(fn, instance, nullptr, args...);
-	}
-
-	/**
-	 * \brief fastcall
-	 */
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__fastcall C::*fn)(Args ...), C* instance, std::type_identity_t<Args> ...args)
-	{
-		detail::_Call_fn_trap(call_conversion::fastcall__);
-		using fn_t = Ret(__fastcall*)(C*, void*, Args ...);
-		return detail::_Call_fn_as<fn_t>(fn, instance, nullptr, args...);
-	}
-
-	/**
-	 * \brief fastcall CONST
-	 */
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__fastcall C::*fn)(Args ...) const, const C* instance, std::type_identity_t<Args> ...args)
-	{
-		detail::_Call_fn_trap(call_conversion::fastcall__);
-		using fn_t = Ret(__fastcall*)(const C*, void*, Args ...);
-		return detail::_Call_fn_as<fn_t>(fn, instance, nullptr, args...);
-	}
-
-	/**
-	 * \brief stdcall
-	 */
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__stdcall C::*fn)(Args ...), C* instance, std::type_identity_t<Args> ...args)
-	{
-		//3
-		detail::_Call_fn_trap(call_conversion::stdcall__);
-		using fn_t = Ret(__stdcall*)(C*, Args ...);
-		return detail::_Call_fn_as<fn_t>(fn, instance, args...);
-	}
-
-	/**
-	 * \brief stdcall CONST
-	 */
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__stdcall C::*fn)(Args ...) const, const C* instance, std::type_identity_t<Args> ...args)
-	{
-		detail::_Call_fn_trap(call_conversion::stdcall__);
-		using fn_t = Ret(__stdcall*)(const C*, Args ...);
-		return detail::_Call_fn_as<fn_t>(fn, instance, args...);
-	}
-
-	/**
-	 * \brief cdecl
-	 */
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__cdecl C::*fn)(Args ...), C* instance, std::type_identity_t<Args> ...args)
-	{
-		detail::_Call_fn_trap(call_conversion::cdecl__);
-		using fn_t = Ret(__cdecl*)(C*, Args ...);
-		return detail::_Call_fn_as<fn_t>(fn, instance, args...);
-	}
-
-	/**
-	 * \brief cdecl CONST
-	 */
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__cdecl C::*fn)(Args ...) const, const C* instance, std::type_identity_t<Args> ...args)
-	{
-		detail::_Call_fn_trap(call_conversion::cdecl__);
-		using fn_t = Ret(__cdecl*)(const C*, Args ...);
-		return detail::_Call_fn_as<fn_t>(fn, instance, args...);
-	}
-
-	namespace detail
-	{
-		template <typename Fn, typename C, typename ...Args>
-		decltype(auto) _Call_virtual_fn(Fn fn, C* instance, size_t index, Args&& ...args)
-		{
-			auto vtable                  = _Pointer_to_virtual_class_table(instance);
-			reinterpret_cast<void*&>(fn) = vtable[index];
-			return _Call_function(fn, instance, std::forward<Args>(args)...);
-		}
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__thiscall C::*fn_sample)(Args ...), C* instance, size_t index, std::type_identity_t<Args> ...args)
-	{
-		return detail::_Call_virtual_fn(fn_sample, instance, index, std::forward<Args>(args)...);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__thiscall C::*fn_sample)(Args ...) const, const C* instance, size_t index, std::type_identity_t<Args> ...args)
-	{
-		return detail::_Call_virtual_fn(fn_sample, instance, index, std::forward<Args>(args)...);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__fastcall C::*fn_sample)(Args ...), C* instance, size_t index, std::type_identity_t<Args> ...args)
-	{
-		return detail::_Call_virtual_fn(fn_sample, instance, index, std::forward<Args>(args)...);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__fastcall C::*fn_sample)(Args ...) const, const C* instance, size_t index, std::type_identity_t<Args> ...args)
-	{
-		return detail::_Call_virtual_fn(fn_sample, instance, index, std::forward<Args>(args)...);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__stdcall C::*fn_sample)(Args ...), C* instance, size_t index, std::type_identity_t<Args> ...args)
-	{
-		return detail::_Call_virtual_fn(fn_sample, instance, index, std::forward<Args>(args)...);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__stdcall C::*fn_sample)(Args ...) const, const C* instance, size_t index, std::type_identity_t<Args> ...args)
-	{
-		return detail::_Call_virtual_fn(fn_sample, instance, index, std::forward<Args>(args)...);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__cdecl C::*fn_sample)(Args ...), C* instance, size_t index, std::type_identity_t<Args> ...args)
-	{
-		return detail::_Call_virtual_fn(fn_sample, instance, index, std::forward<Args>(args)...);
-	}
-
-	template <typename Ret, typename C, typename ...Args>
-	Ret _Call_function(Ret (__cdecl C::*fn_sample)(Args ...) const, const C* instance, size_t index, std::type_identity_t<Args> ...args)
-	{
-		return detail::_Call_virtual_fn(fn_sample, instance, index, std::forward<Args>(args)...);
-	}
-
-	/**
-	 * \brief fastcall STATIC
-	 */
-	template <typename Ret, typename ...Args>
-	Ret _Call_function(Ret (__fastcall*fn)(Args ...), std::type_identity_t<Args> ...args) = delete;
-
-	/**
-	 * \brief stdcall STATIC
-	 */
-	template <typename Ret, typename ...Args>
-	Ret _Call_function(Ret (__stdcall*fn)(Args ...), std::type_identity_t<Args> ...args)
-	{
-		detail::_Call_fn_trap(call_conversion::stdcall__);
-		return std::invoke(fn, args...);
-	}
-
-	/**
-	 * \brief cdecl STATIC
-	 */
-	template <typename Ret, typename ...Args>
-	Ret _Call_function(Ret (__cdecl*fn)(Args ...), std::type_identity_t<Args> ...args)
-	{
-		detail::_Call_fn_trap(call_conversion::cdecl__);
-		return std::invoke(fn, args...);
-	}
-#pragma endregion
-
+	
 	class __declspec(novtable) hook_holder_base
 	{
 	protected:
@@ -765,6 +498,6 @@ namespace dhooks
 
 	DHOOKS_CALL_CVS_HELPER(CHEAT_HOOK_HOLDER_DETECTOR)
 
-#define DHOOKS_DETECT_HOOK_HOLDER(_SAMPLE_) \
-	decltype(dhooks::_Detect_hook_holder(_SAMPLE_,std::in_place_index<__COUNTER__>))
+	template <size_t Idx, typename Fn>
+	using _Detect_hook_holder_t = decltype(_Detect_hook_holder(std::declval<Fn>( ), std::in_place_index<Idx>));
 }

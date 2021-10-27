@@ -21,12 +21,12 @@ nstd::address method_info::get_target_method( ) const
 	return target_method_;
 }
 
-void detail::_Call_fn_trap(call_conversion original, call_conversion called)
+void detail::_Call_fn_trap([[maybe_unused]] call_conversion original, [[maybe_unused]] call_conversion called)
 {
 #ifdef _DEBUG
 	[[maybe_unused]] const auto a = _ReturnAddress( );
 	[[maybe_unused]] const auto b = _AddressOfReturnAddress( );
-	constexpr auto              _ = 0;
+	constexpr auto _              = 0;
 #endif // _DEBUG
 }
 
