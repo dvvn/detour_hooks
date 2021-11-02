@@ -306,7 +306,7 @@ void hook_entry::init_backup(LPVOID from, size_t bytes_count)
 	auto& b = impl_->backup;
 	runtime_assert(b.empty());
 
-	auto rng = nstd::memory_block(from, bytes_count).bytes_range( );
+	auto rng = nstd::memory_block(from, bytes_count);
 	b.assign(rng.begin( ), rng.end( ));
 }
 

@@ -8,6 +8,8 @@
 
 #include <Windows.h>
 
+#include <vector>
+
 using namespace dhooks::detail;
 using namespace dhooks;
 //bool dhooks::detail::_Is_code_padding(LPBYTE pInst, UINT size)
@@ -29,7 +31,7 @@ struct trampoline2::impl
 {
 	LPVOID target = nullptr;
 	LPVOID detour = nullptr; // [In] Address of the detour function.
-	#if defined(_M_X64) || defined(__x86_64__)
+#if defined(_M_X64) || defined(__x86_64__)
 		LPVOID pRelay=nullptr; // [Out] Address of the relay function.
 #endif
 	std::vector<uint8_t> trampoline;
@@ -98,23 +100,23 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
     };
 #else
 	CALL_REL call = {
-		0xE8,      // E8 xxxxxxxx: CALL +5+xxxxxxxx
-		0x00000000 // Relative destination address
+			0xE8,      // E8 xxxxxxxx: CALL +5+xxxxxxxx
+			0x00000000 // Relative destination address
 	};
 	JMP_REL jmp = {
-		0xE9,      // E9 xxxxxxxx: JMP +5+xxxxxxxx
-		0x00000000 // Relative destination address
+			0xE9,      // E9 xxxxxxxx: JMP +5+xxxxxxxx
+			0x00000000 // Relative destination address
 	};
 	JCC_REL jcc = {
-		0x0F, 0x80, // 0F8* xxxxxxxx: J** +6+xxxxxxxx
-		0x00000000  // Relative destination address
+			0x0F, 0x80, // 0F8* xxxxxxxx: J** +6+xxxxxxxx
+			0x00000000  // Relative destination address
 	};
 #endif
 
-	UINT8     old_pos  = 0;
-	UINT8     new_pos  = 0;
+	UINT8 old_pos      = 0;
+	UINT8 new_pos      = 0;
 	ULONG_PTR jmp_dest = 0;     // Destination address of an internal jump.
-	bool      finished = false; // Is the function completed?
+	bool finished      = false; // Is the function completed?
 #if defined(_M_X64) || defined(__x86_64__)
     UINT8 instBuf[16];
 #endif
@@ -124,9 +126,9 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 
 	do
 	{
-		HDE_data   hs;
-		uint8_t    copy_size = 0;
-		ULONG_PTR  new_inst;
+		HDE_data hs;
+		uint8_t copy_size = 0;
+		ULONG_PTR new_inst;
 		const auto old_inst = reinterpret_cast<ULONG_PTR>(ct.target) + old_pos;
 
 		// ReSharper disable once CppInconsistentNaming
