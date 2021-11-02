@@ -1,35 +1,11 @@
 #pragma once
 
-//#include "vtable_counter.h"
 #include "trampoline.h"
 #include "status.h"
 
-#include "nstd/one_instance.h"
-
 namespace dhooks
 {
-	//class hook_entry final
-	//{
-	//public:
-	//	~hook_entry( );
-	//	hook_entry( ) = default;
-
-	//	hook_entry(const hook_entry&)            = delete;
-	//	hook_entry& operator=(const hook_entry&) = delete;
-	//	hook_entry(hook_entry&& other) noexcept;
-	//	hook_entry& operator=(hook_entry&& other) noexcept;
-
-	//	
-
-	//private:
-	//	struct impl;
-	//	std::unique_ptr<impl>impl_;
-	//	detail::trampoline2 tr;
-
-	//	 backup; // Original prologue of the target function.
-	//	bool     enabled = false;
-	//};
-	class hook_entry: public detail::trampoline2
+	class hook_entry : public detail::trampoline2
 	{
 	public:
 		hook_entry( );
@@ -61,7 +37,7 @@ namespace dhooks
 		hook_entry* entry = nullptr;
 	};
 
-	class context_base
+	class __declspec(novtable) context_base
 	{
 	public:
 		virtual ~context_base( ) = default;
@@ -71,12 +47,12 @@ namespace dhooks
 		virtual hook_status enable_hook(LPVOID target) = 0;
 		virtual hook_status disable_hook(LPVOID target) = 0;
 		virtual hook_result find_hook(LPVOID target) const = 0;
-		virtual void        remove_all_hooks( ) = 0;
+		virtual void remove_all_hooks( ) = 0;
 		virtual hook_status enable_all_hooks( ) = 0;
 		virtual hook_status disable_all_hooks( ) = 0;
 	};
 
-	class context final: public context_base
+	class context final : public context_base
 	{
 	public:
 		using element_type = hook_entry;
@@ -90,7 +66,7 @@ namespace dhooks
 		hook_status enable_hook(LPVOID target) override;
 		hook_status disable_hook(LPVOID target) override;
 		hook_result find_hook(LPVOID target) const override;
-		void        remove_all_hooks( ) override;
+		void remove_all_hooks( ) override;
 		hook_status enable_all_hooks( ) override;
 		hook_status disable_all_hooks( ) override;
 
@@ -98,7 +74,7 @@ namespace dhooks
 		std::unique_ptr<storage_type> storage_;
 	};
 
-	class context_safe final: public context_base
+	class context_safe final : public context_base
 	{
 	public:
 		struct lock_type;
@@ -111,12 +87,12 @@ namespace dhooks
 		hook_status enable_hook(LPVOID target) override;
 		hook_status disable_hook(LPVOID target) override;
 		hook_result find_hook(LPVOID target) const override;
-		void        remove_all_hooks( ) override;
+		void remove_all_hooks( ) override;
 		hook_status enable_all_hooks( ) override;
 		hook_status disable_all_hooks( ) override;
 
 	private:
-		context                    ctx_;
+		context ctx_;
 		std::unique_ptr<lock_type> mtx_;
 	};
 

@@ -1,7 +1,8 @@
 #include "hook.h"
 
-#include <nstd/memory block.h>
 #include <nstd/runtime_assert_fwd.h>
+#include <nstd/address.h>
+#include <nstd/mem/block.h>
 
 #include <Windows.h>
 
@@ -9,7 +10,6 @@
 #include <ranges>
 #include <stdexcept>
 #include <vector>
-#include <list>
 
 using namespace dhooks;
 using namespace dhooks::detail;
@@ -102,31 +102,20 @@ status_ex::status_ex(status s) : status_ex_impl{s}
 }
 #endif
 
-struct context::storage_type: std::list<element_type>
+struct context::storage_type : std::vector<element_type>
 {
 };
-
-static hook_entry* _Find_hook(context::storage_type& storage, LPVOID target)
-{
-	runtime_assert(target != nullptr);
-	for (auto& h: storage)
-	{
-		if (h.target( ) == target)
-			return std::addressof(h);
-	}
-	return nullptr;
-}
 
 static auto _Find_hook_itr(context::storage_type& storage, LPVOID target)
 {
 	runtime_assert(target != nullptr);
-	//return std::ranges::find(storage, target, &context::element_type::target);
-	for (auto itr = storage.begin( ); itr != storage.end( ); ++itr)
-	{
-		if (itr->target( ) == target)
-			return itr;
-	}
-	return storage.end( );
+	return std::ranges::find(storage, target, &context::element_type::target);
+}
+
+static hook_entry* _Find_hook(context::storage_type& storage, LPVOID target)
+{
+	auto itr = _Find_hook_itr(storage, target);
+	return itr == storage.end( ) ? nullptr : std::addressof(*itr);
 }
 
 static hook_status _Set_hook_state(context::storage_type& storage, LPVOID target, bool enable)
@@ -211,7 +200,7 @@ static hook_status _Set_hook_state_all(context::storage_type& storage, bool enab
 
 struct hook_entry::impl
 {
-	bool                 enabled = 0;
+	bool enabled = false;
 	std::vector<uint8_t> backup;
 };
 
@@ -233,8 +222,8 @@ hook_status hook_entry::set_state(bool enable)
 	if (this->enabled( ) == enable)
 		return enable ? hook_status::ERROR_ENABLED : hook_status::ERROR_DISABLED;
 
-	auto   patch_target = static_cast<LPBYTE>(this->target( ));
-	SIZE_T patch_size   = sizeof(JMP_REL);
+	auto patch_target = static_cast<LPBYTE>(this->target( ));
+	SIZE_T patch_size = sizeof(JMP_REL);
 
 	const auto patch_above = this->patch_above( );
 
@@ -306,13 +295,13 @@ void hook_entry::init_backup(LPVOID from, size_t bytes_count)
 	auto& b = impl_->backup;
 	runtime_assert(b.empty());
 
-	auto rng = nstd::memory_block(from, bytes_count);
+	auto rng = nstd::mem::block(from, bytes_count);
 	b.assign(rng.begin( ), rng.end( ));
 }
 
 void hook_entry::mark_disabled( )
 {
-	impl_->enabled = 0;
+	impl_->enabled = false;
 }
 
 context::context( )
@@ -324,7 +313,7 @@ context::~context( ) = default;
 
 hook_result context::create_hook(LPVOID target, LPVOID detour)
 {
-	if (!nstd::memory_block(target).executable( ) || !nstd::memory_block(detour).executable( ))
+	if (!nstd::mem::block(target).executable( ) || !nstd::mem::block(detour).executable( ))
 		return hook_status::ERROR_NOT_EXECUTABLE;
 
 #if 0
@@ -404,7 +393,7 @@ hook_status context::disable_hook(LPVOID target)
 	return _Set_hook_state(*storage_, target, false);
 }
 
-hook_result context::find_hook(LPVOID target)const
+hook_result context::find_hook(LPVOID target) const
 {
 	const auto entry = _Find_hook(*storage_, target);
 	if (!entry)
@@ -444,7 +433,7 @@ hook_status context::disable_all_hooks( )
 	return _Set_hook_state_all(*storage_, false);
 }
 
-struct context_safe::lock_type: std::mutex
+struct context_safe::lock_type : std::mutex
 {
 };
 
@@ -483,7 +472,7 @@ hook_status context_safe::disable_hook(LPVOID target)
 	return LOCK_AND_WORK(disable_hook, target);
 }
 
-hook_result context_safe::find_hook(LPVOID target)const
+hook_result context_safe::find_hook(LPVOID target) const
 {
 	return LOCK_AND_WORK(find_hook, target);
 }

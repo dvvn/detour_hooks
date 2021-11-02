@@ -2,9 +2,10 @@
 
 #include "hde/include.h"
 
-#include <nstd/memory block.h>
-#include <nstd/memory protect.h>
 #include <nstd/runtime_assert_fwd.h>
+#include <nstd/address.h>
+#include <nstd/mem/block.h>
+#include <nstd/mem/protect.h>
 
 #include <Windows.h>
 
@@ -42,7 +43,7 @@ struct trampoline2::impl
 	std::vector<uint8_t> old_ips; // [Out] Instruction boundaries of the target function.
 	std::vector<uint8_t> new_ips; // [Out] Instruction boundaries of the trampoline function.
 
-	nstd::memory_protect old_protection;
+	nstd::mem::protect old_protection;
 };
 
 trampoline2::trampoline2( )
@@ -61,7 +62,7 @@ bool trampoline2::fix_page_protection( )
 	const auto buff      = impl_->trampoline.data( );
 	const auto buff_size = impl_->trampoline.size( );
 
-	if (!nstd::memory_block(buff, buff_size).executable( ))
+	if (!nstd::mem::block(buff, buff_size).executable( ))
 	{
 		try
 		{
@@ -317,16 +318,16 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 	using namespace nstd;
 
 	// Is there enough place for a long jump?
-	if (old_pos < sizeof(JMP_REL) && !memory_block(address(ct.target) + old_pos, sizeof(JMP_REL) - old_pos).code_padding( ))
+	if (old_pos < sizeof(JMP_REL) && !mem::block(address(ct.target) + old_pos, sizeof(JMP_REL) - old_pos).code_padding( ))
 	{
 		// Is there enough place for a short jump?
-		if (old_pos < sizeof(JMP_REL_SHORT) && !memory_block(address(ct.target) + old_pos, sizeof(JMP_REL_SHORT) - old_pos).code_padding( ))
+		if (old_pos < sizeof(JMP_REL_SHORT) && !mem::block(address(ct.target) + old_pos, sizeof(JMP_REL_SHORT) - old_pos).code_padding( ))
 			return false;
 
 		// Can we place the long jump above the function?
-		if (!memory_block(address(ct.target) - sizeof(JMP_REL)).executable( ))
+		if (!mem::block(address(ct.target) - sizeof(JMP_REL)).executable( ))
 			return false;
-		if (!memory_block(address(ct.target) - sizeof(JMP_REL), sizeof(JMP_REL)).code_padding( ))
+		if (!mem::block(address(ct.target) - sizeof(JMP_REL), sizeof(JMP_REL)).code_padding( ))
 			return false;
 
 		ct.patch_above = true;
