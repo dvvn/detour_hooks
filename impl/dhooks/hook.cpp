@@ -20,18 +20,18 @@ using namespace dhooks::detail;
 
 static DWORD_PTR FindOldIP(HOOK_ENTRY& pHook, DWORD_PTR ip)
 {
-	if(pHook.patchAbove && ip == ((DWORD_PTR)pHook.target - sizeof(JMP_REL)))
+	if (pHook.patchAbove && ip == ((DWORD_PTR)pHook.target - sizeof(JMP_REL)))
 		return (DWORD_PTR)pHook.target;
 
-	for(UINT i = 0; i < pHook.nIP; ++i)
+	for (UINT i = 0; i < pHook.nIP; ++i)
 	{
-		if(ip == ((DWORD_PTR)pHook.pTrampoline.get( ) + pHook.newIPs[i]))
+		if (ip == ((DWORD_PTR)pHook.pTrampoline.get() + pHook.newIPs[i]))
 			return (DWORD_PTR)pHook.target + pHook.oldIPs[i];
 	}
 
 #if defined(_M_X64) || defined(_x86_64_)
 	// Check relay function.
-	if(ip == (DWORD_PTR)pHook.pDetour)
+	if (ip == (DWORD_PTR)pHook.pDetour)
 		return (DWORD_PTR)pHook.target;
 #endif
 
@@ -40,10 +40,10 @@ static DWORD_PTR FindOldIP(HOOK_ENTRY& pHook, DWORD_PTR ip)
 
 static DWORD_PTR FindNewIP(HOOK_ENTRY& pHook, DWORD_PTR ip)
 {
-	for(UINT i = 0; i < pHook.nIP; ++i)
+	for (UINT i = 0; i < pHook.nIP; ++i)
 	{
-		if(ip == ((DWORD_PTR)pHook.target + pHook.oldIPs[i]))
-			return (DWORD_PTR)pHook.pTrampoline.get( ) + pHook.newIPs[i];
+		if (ip == ((DWORD_PTR)pHook.target + pHook.oldIPs[i]))
+			return (DWORD_PTR)pHook.pTrampoline.get() + pHook.newIPs[i];
 	}
 
 	return 0;
@@ -62,19 +62,19 @@ static void ProcessThreadIPs(HANDLE hThread, const hooks_storage::iterator& pos,
 #endif
 
 	c.ContextFlags = CONTEXT_CONTROL;
-	if(!GetThreadContext(hThread, &c))
+	if (!GetThreadContext(hThread, &c))
 		return;
 
-	for(auto pHook : storage::get( ).filter_enabled(std::span{pos, storage::get( ).end( )}, enable))
+	for (auto pHook : storage::get().filter_enabled(std::span{ pos, storage::get().end() }, enable))
 	{
 		DWORD_PTR ip;
 
-		if(enable)
+		if (enable)
 			ip = FindNewIP(*pHook, *pIP);
 		else
 			ip = FindOldIP(*pHook, *pIP);
 
-		if(ip != 0)
+		if (ip != 0)
 		{
 			*pIP = ip;
 			SetThreadContext(hThread, &c);
@@ -84,16 +84,16 @@ static void ProcessThreadIPs(HANDLE hThread, const hooks_storage::iterator& pos,
 #endif
 
 #ifdef _DEBUG_OFF
-status_ex::status_ex(status s) : status_ex_impl{s}
+status_ex::status_ex(status s) : status_ex_impl{ s }
 {
-	if(s == status::OK)
+	if (s == status::OK)
 		return;
 
 	const auto start = string_view("Error detected: status ");
 	const auto end = status_to_string(s);
 
 	std::string str;
-	str.reserve(start.size( ) + end.size( ));
+	str.reserve(start.size() + end.size());
 
 	str += start;
 	str += end;
@@ -148,10 +148,10 @@ static hook_status _Set_hook_state_all(context::storage_type& storage, bool enab
 			continue;
 
 #if 0
-		if(pause_threads)
+		if (pause_threads)
 		{
 			//fill only if any hook enabled
-			frozen.fill( );
+			frozen.fill();
 		}
 #endif
 
@@ -171,9 +171,9 @@ static hook_status _Set_hook_state_all(context::storage_type& storage, bool enab
 		}
 #else
 		const auto main_status = value.set_state(enable);
-		if(main_status == hook_status::OK)
+		if (main_status == hook_status::OK)
 			continue;
-		if(ignore_errors)
+		if (ignore_errors)
 			continue;
 #endif
 
@@ -202,6 +202,11 @@ struct hook_entry::impl
 {
 	bool enabled = false;
 	std::vector<uint8_t> backup;
+
+	~impl( )
+	{
+		runtime_assert(enabled == false, "Unable to destroy enabled hook entry!");
+	}
 };
 
 hook_entry::hook_entry( )
@@ -209,11 +214,7 @@ hook_entry::hook_entry( )
 	impl_ = std::make_unique<impl>( );
 }
 
-hook_entry::~hook_entry( )
-{
-	runtime_assert(!impl_->enabled, "Unable to destroy enabled hook entry!");
-}
-
+hook_entry::~hook_entry( )                               = default;
 hook_entry::hook_entry(hook_entry&&) noexcept            = default;
 hook_entry& hook_entry::operator=(hook_entry&&) noexcept = default;
 
@@ -317,9 +318,9 @@ hook_result context::create_hook(LPVOID target, LPVOID detour)
 		return hook_status::ERROR_NOT_EXECUTABLE;
 
 #if 0
-	if(storage_->find(target) != nullptr)
+	if (storage_->find(target) != nullptr)
 		return hook_status::ERROR_ALREADY_CREATED;
-	if(storage_->find(pDetour) != nullptr)
+	if (storage_->find(pDetour) != nullptr)
 		return hook_status::ERROR_ALREADY_CREATED;
 #endif
 
@@ -407,11 +408,11 @@ hook_result context::find_hook(LPVOID target) const
 auto minhook::create_hook_win_api(LPCWSTR pszModule, LPCSTR pszProcName, LPVOID pDetour) -> hook_result
 {
 	const auto hModule = GetModuleHandleW(pszModule);
-	if(hModule == nullptr)
+	if (hModule == nullptr)
 		return hook_status::ERROR_MODULE_NOT_FOUND;
 
 	const auto target = static_cast<LPVOID>(GetProcAddress(hModule, pszProcName));
-	if(target == nullptr)
+	if (target == nullptr)
 		return hook_status::ERROR_FUNCTION_NOT_FOUND;
 
 	return create_hook(target, pDetour);

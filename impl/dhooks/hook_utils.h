@@ -3,7 +3,6 @@
 #include "hook.h"
 #include "helpers.h"
 
-#include <nstd/address.h>
 #include <nstd/runtime_assert_fwd.h>
 
 #include <intrin.h>
@@ -73,7 +72,7 @@ namespace dhooks
 		virtual ~hook_callback( ) = default;
 		virtual Ret __cdecl callback_proxy(hiddent_type<Args> ...) = 0;
 	};
-	
+
 	class __declspec(novtable) hook_holder_base
 	{
 	protected:
@@ -91,6 +90,8 @@ namespace dhooks
 		virtual bool hooked( ) const = 0;
 		virtual bool enabled( ) const = 0;
 	};
+
+	using active_context = nstd::one_instance<std::unique_ptr<context_base>>;
 
 	namespace detail
 	{
@@ -202,7 +203,6 @@ namespace dhooks
 
 		struct hook_holder_data
 		{
-			context ctx;
 			mutable std::mutex lock;
 
 			std::atomic<bool> active = false;
@@ -215,23 +215,18 @@ namespace dhooks
 
 			std::optional<void*> return_address;
 			std::optional<void*> address_of_return_address;
+
+			void* target  = nullptr;
+			void* replace = nullptr;
 		};
 
 		class __declspec(novtable) method_info
 		{
 		protected:
 			virtual ~method_info( ) = default;
-
-			virtual nstd::address get_target_method_impl( ) const = 0;
-
-		private:
-			nstd::address target_method_;
-
 		public:
-			nstd::address get_target_method( );
-			nstd::address get_target_method( ) const;
-
-			virtual nstd::address get_replace_method( ) = 0;
+			virtual void* get_target_method( ) const =0;
+			virtual void* get_replace_method( ) = 0;
 		};
 
 		template <typename Ret, call_conversion CallCvs, typename Arg1, typename ...Args>
@@ -272,18 +267,16 @@ namespace dhooks
 				if (!data_.active)
 					data_.active = true;
 
-				auto& ctx = data_.ctx;
-
 				// ReSharper disable once CppInconsistentNaming
 				auto& _Instance = this->instance( );
 
 				runtime_assert(this->original_fn == nullptr, "Method already hooked!");
 				runtime_assert(_Instance == nullptr || _Instance == this, "Class duplicate detected!");
 
-				auto target_func  = this->get_target_method( ).ptr<void>( );
-				auto replace_func = this->get_replace_method( ).ptr<void>( );
+				data_.target  = this->get_target_method( );
+				data_.replace = this->get_replace_method( );
 
-				const auto result = ctx.create_hook(target_func, replace_func);
+				const auto result = active_context::get( )->create_hook(data_.target, data_.replace);
 				if (result.status != hook_status::OK)
 				{
 					runtime_assert("Unable to hook function");
@@ -300,20 +293,16 @@ namespace dhooks
 			{
 				if (!data_.active)
 					return false;
-				data_.active = false;
 
 				const auto lock = std::scoped_lock(data_.lock);
-				auto& ctx       = data_.ctx;
-
-				auto target_func = this->get_target_method( ).ptr<void>( );
-				const auto ok    = ctx.remove_hook(target_func, true) == hook_status::OK;
-				/*if (!ok && !force)
+				const auto ret  = active_context::get( )->remove_hook(data_.target, true) == hook_status::OK;
+				if (ret)
 				{
-					runtime_assert("Unable to unhook function");
-					return false;
-				}*/
-
-				return ok;
+					data_.active     = false;
+					data_.after_call = {};
+					data_.replace    = data_.target = 0;
+				}
+				return ret;
 			}
 
 			void unhook_after_call( ) final
@@ -327,11 +316,7 @@ namespace dhooks
 					return false;
 
 				const auto lock = std::scoped_lock(data_.lock);
-				auto& ctx       = data_.ctx;
-
-				auto target_func = this->get_target_method( ).ptr<void>( );
-
-				return (ctx.enable_hook(target_func) == hook_status::OK);
+				return (active_context::get( )->enable_hook(data_.target) == hook_status::OK);
 			}
 
 			bool disable( ) final
@@ -340,11 +325,7 @@ namespace dhooks
 					return false;
 
 				const auto lock = std::scoped_lock(data_.lock);
-				auto& ctx       = data_.ctx;
-
-				auto target_func = this->get_target_method( ).ptr<void>( );
-
-				const auto ret = (ctx.disable_hook(target_func) == hook_status::OK);
+				const auto ret  = (active_context::get( )->disable_hook(data_.target) == hook_status::OK);
 
 				data_.after_call.disable = false;
 				return ret;
@@ -361,10 +342,7 @@ namespace dhooks
 					return false;
 
 				const auto lock = std::scoped_lock(data_.lock);
-				auto& ctx       = data_.ctx;
-
-				auto target_func = this->get_target_method( ).ptr<void>( );
-				return ctx.find_hook(target_func).status == hook_status::OK;
+				return active_context::get( )->find_hook(data_.target).status == hook_status::OK;
 			}
 
 			bool enabled( ) const final
@@ -373,10 +351,7 @@ namespace dhooks
 					return false;
 
 				const auto lock = std::scoped_lock(data_.lock);
-				auto& ctx       = data_.ctx;
-
-				auto target_func = this->get_target_method( ).ptr<void>( );
-				auto hook        = ctx.find_hook(target_func);
+				const auto hook = active_context::get( )->find_hook(data_.target);
 				if (hook.status != hook_status::OK)
 					return false;
 				return hook.entry->enabled( );
@@ -468,7 +443,7 @@ namespace dhooks
 			}\
 		}\
 	public:\
-		nstd::address get_replace_method( ) final\
+		void* get_replace_method( ) final\
 		{\
 			return _Pointer_to_class_method(&hook_holder::callback_proxy);\
 		}\
