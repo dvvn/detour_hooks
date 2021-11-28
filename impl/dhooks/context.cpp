@@ -330,25 +330,27 @@ hook_status context::disable_all_hooks( )
 	return _Set_hook_state_all(*storage_, false);
 }
 
-struct context_safe::impl : std::recursive_mutex
+struct context_safe::impl : std::recursive_mutex, std::unique_ptr<basic_context>
 {
-	std::unique_ptr<basic_context> ctx;
+	impl(std::unique_ptr<basic_context>&& ctx)
+		: std::recursive_mutex( ), std::unique_ptr<basic_context>(std::move(ctx))
+	{
+	}
 };
-
-#define LOCK_AND_WORK(_FN_,...) \
-	const auto lock = std::scoped_lock(*impl_);\
-	return impl_->ctx->_FN_(__VA_ARGS__)
 
 context_safe::context_safe(std::unique_ptr<basic_context>&& ctx)
 {
-	runtime_assert(std::dynamic_pointer_cast<context_safe>(ctx) == nullptr);
-	impl_      = std::make_unique<impl>( );
-	impl_->ctx = std::move(ctx);
+	impl_ = std::make_unique<impl>(std::move(ctx));
 }
 
 context_safe::~context_safe( )                                 = default;
 context_safe::context_safe(context_safe&&) noexcept            = default;
 context_safe& context_safe::operator=(context_safe&&) noexcept = default;
+
+#define LOCK_AND_WORK(_FN_,...) \
+	auto &ref = *impl_;\
+	const auto lock = std::scoped_lock(ref);\
+	return ref->_FN_(__VA_ARGS__)
 
 hook_result context_safe::create_hook(void* target, void* detour)
 {

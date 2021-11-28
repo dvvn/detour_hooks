@@ -59,6 +59,9 @@ namespace dhooks
 	{
 	public:
 		context_safe(std::unique_ptr<basic_context>&& ctx);
+		template <std::derived_from<context_safe> T>
+		context_safe(std::unique_ptr<T>&& ctx) = delete;
+
 		~context_safe( ) override;
 		context_safe(context_safe&&) noexcept;
 		context_safe& operator=(context_safe&&) noexcept;
