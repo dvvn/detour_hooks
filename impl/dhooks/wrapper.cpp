@@ -1,7 +1,7 @@
 #include "wrapper.h"
 #include "entry.h"
 
-#include <nstd/runtime_assert_fwd.h>
+#include <nstd/runtime_assert.h>
 
 #include <mutex>
 

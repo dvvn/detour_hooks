@@ -2,7 +2,7 @@
 
 #include "hde/include.h"
 
-#include <nstd/runtime_assert_fwd.h>
+#include <nstd/runtime_assert.h>
 #include <nstd/address.h>
 #include <nstd/mem/block.h>
 #include <nstd/mem/protect.h>
