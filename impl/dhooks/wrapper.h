@@ -82,7 +82,7 @@ namespace dhooks
 
 	DHOOKS_CALL_CVS_HELPER(DHOOKS_HOOK_ORIGINAL_FN)
 
-	template <class Ret>
+		template <class Ret>
 	class return_value_holder
 	{
 		Ret value_;
@@ -96,13 +96,13 @@ namespace dhooks
 		void store_return_value(Ret&& val)
 		{
 			value_ = std::move(val);
-			set_   = true;
+			set_ = true;
 		}
 
 		void store_return_value(const Ret& val)
 		{
 			value_ = val;
-			set_   = true;
+			set_ = true;
 		}
 
 		void reset_return_value( )
@@ -115,13 +115,13 @@ namespace dhooks
 			return set_;
 		}
 
-		Ret&& get_return_value( ) &&
+		Ret&& get_return_value( )&&
 		{
 			set_ = false;
 			return static_cast<Ret&&>(value_);
 		}
 
-		Ret get_return_value( ) &
+		Ret get_return_value( )&
 		{
 			if constexpr (std::is_copy_constructible_v<Ret>)
 				return value_;
@@ -151,12 +151,12 @@ namespace dhooks
 			return called_;
 		}
 
-		void get_return_value( ) &
+		void get_return_value( )&
 		{
 			(void)this;
 		}
 
-		void get_return_value( ) &&
+		void get_return_value( )&&
 		{
 			called_ = false;
 		}
@@ -197,8 +197,8 @@ namespace dhooks
 		bool hooked( ) const final;
 		bool enabled( ) const final;
 
-		virtual void* get_target_method( ) const =0;
-		virtual void* get_replace_method( ) =0;
+		virtual void* get_target_method( ) const = 0;
+		virtual void* get_replace_method( ) = 0;
 
 		hook_holder_data(hook_holder_data&&) noexcept;
 		hook_holder_data& operator=(hook_holder_data&&) noexcept;
@@ -215,12 +215,12 @@ namespace dhooks
 	class return_address_getter
 	{
 #ifdef __INTRIN_H_
-        void* addr1_ = nullptr; //_ReturnAddress
-        void* addr2_ = nullptr; //_AddressOfReturnAddress
+		void* addr1_ = nullptr; //_ReturnAddress
+		void* addr2_ = nullptr; //_AddressOfReturnAddress
 #endif
 	public:
 #ifdef __INTRIN_H_
-        using return_address_t=void*;
+		using return_address_t = void*;
 #else
 		using return_address_t = void;
 #endif
@@ -229,9 +229,9 @@ namespace dhooks
 		{
 #ifdef __INTRIN_H_
 #ifdef _DEBUG
-            if (addr1_)
+			if (addr1_)
 #endif
-                return addr1_;
+				return addr1_;
 #else
 			(void)this;
 #endif
@@ -242,9 +242,9 @@ namespace dhooks
 		{
 #ifdef __INTRIN_H_
 #ifdef _DEBUG
-            if (addr2_)
+			if (addr2_)
 #endif
-                return addr2_;
+				return addr2_;
 #else
 			(void)this;
 #endif
@@ -252,11 +252,11 @@ namespace dhooks
 		}
 
 #ifdef __INTRIN_H_
-        void set_return_address(void* addr1, void* addr2)
-        {
-            addr1_ = addr1;
-            addr2_ = addr2;
-        }
+		void set_return_address(void* addr1, void* addr2)
+		{
+			addr1_ = addr1;
+			addr2_ = addr2;
+		}
 #endif
 	};
 
@@ -268,9 +268,9 @@ namespace dhooks
 
 	template <typename Ret, call_conversion CallCvs, typename Arg1, typename ...Args>
 	class hook_holder_impl : public return_address_getter
-						   , public original_function<Ret, CallCvs, Arg1, Args...>
-						   , public hook_holder_data
-						   , public hook_callback<Ret, Args...>
+		, public original_function<Ret, CallCvs, Arg1, Args...>
+		, public hook_holder_data
+		, public hook_callback<Ret, Args...>
 	{
 	protected:
 		static hook_holder_impl*& instance( )
@@ -285,8 +285,8 @@ namespace dhooks
 		{
 			auto& ref = instance( );
 #ifdef _DEBUG
-            if (ref != nullptr)
-                std::_Xout_of_range(__FUNCSIG__": instance already created!");
+			if (ref != nullptr)
+				std::_Xout_of_range(__FUNCSIG__": instance already created!");
 #endif
 			ref = this;
 		}
@@ -377,8 +377,12 @@ namespace dhooks
 	hook_holder<Ret, call_conversion::_CALL_CVS_##__, void,/* false,*/ Args...>\
     { return {}; }
 
-	DHOOKS_CALL_CVS_HELPER(CHEAT_HOOK_HOLDER_DETECTOR)
+		DHOOKS_CALL_CVS_HELPER(CHEAT_HOOK_HOLDER_DETECTOR)
 
-	template <size_t Idx, typename Fn>
+#if 0
+		template <size_t Idx, typename Fn>
 	using _Detect_hook_holder_t = decltype(_Detect_hook_holder(std::declval<Fn>( )));
+#endif
+	template<typename Fn>
+	using select_hook_holder = decltype(_Detect_hook_holder(std::declval<Fn>( )));
 }

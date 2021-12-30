@@ -1,9 +1,9 @@
 #include "status.h"
 
-#include <nstd/runtime_assert_fwd.h>
+#include <nstd/runtime_assert.h>
+#include <nstd/ranges.h>
 
 #include <array>
-#include <ranges>
 
 using namespace dhooks;
 

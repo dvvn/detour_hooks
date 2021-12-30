@@ -1,25 +1,25 @@
 #include "context.h"
 #include "entry.h"
 
-#include <nstd/runtime_assert_fwd.h>
-#include <nstd/mem/block.h>
-#include <nstd/address.h>
+#include <nstd/runtime_assert.h>
+#include <nstd/ranges.h>
 
 #include <Windows.h>
 
 #include <vector>
 #include <mutex>
-#include <ranges>
 #ifdef _DEBUG
 #include <stdexcept>
 #endif
+
+import nstd.mem.block;
 
 using namespace dhooks;
 using namespace dhooks::detail;
 
 #if 0
 
-//i found it uselles
+//i found it useless
 
 static DWORD_PTR FindOldIP(HOOK_ENTRY& pHook, DWORD_PTR ip)
 {

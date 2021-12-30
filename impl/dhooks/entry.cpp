@@ -1,14 +1,12 @@
 #include "entry.h"
 
-#include <nstd/runtime_assert_fwd.h>
-// ReSharper disable once CppUnusedIncludeDirective
-#include <nstd/address.h>
-#include <nstd/mem/block.h>
+#include <nstd/runtime_assert.h>
 
 #include <Windows.h>
 
 #include <vector>
 
+import nstd.mem.block;
 
 using namespace dhooks;
 using namespace dhooks::detail;
