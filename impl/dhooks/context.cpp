@@ -1,8 +1,8 @@
-#include "context.h"
-#include "entry.h"
+module;
 
 #include <nstd/runtime_assert.h>
 #include <nstd/ranges.h>
+#include <nstd/mem/block_includes.h>
 
 #include <Windows.h>
 
@@ -12,10 +12,10 @@
 #include <stdexcept>
 #endif
 
+module dhooks:context;
 import nstd.mem.block;
 
 using namespace dhooks;
-using namespace dhooks::detail;
 
 #if 0
 
@@ -28,7 +28,7 @@ static DWORD_PTR FindOldIP(HOOK_ENTRY& pHook, DWORD_PTR ip)
 
 	for (UINT i = 0; i < pHook.nIP; ++i)
 	{
-		if (ip == ((DWORD_PTR)pHook.pTrampoline.get() + pHook.newIPs[i]))
+		if (ip == ((DWORD_PTR)pHook.pTrampoline.get( ) + pHook.newIPs[i]))
 			return (DWORD_PTR)pHook.target + pHook.oldIPs[i];
 	}
 
@@ -46,7 +46,7 @@ static DWORD_PTR FindNewIP(HOOK_ENTRY& pHook, DWORD_PTR ip)
 	for (UINT i = 0; i < pHook.nIP; ++i)
 	{
 		if (ip == ((DWORD_PTR)pHook.target + pHook.oldIPs[i]))
-			return (DWORD_PTR)pHook.pTrampoline.get() + pHook.newIPs[i];
+			return (DWORD_PTR)pHook.pTrampoline.get( ) + pHook.newIPs[i];
 	}
 
 	return 0;
@@ -68,7 +68,7 @@ static void ProcessThreadIPs(HANDLE hThread, const hooks_storage::iterator& pos,
 	if (!GetThreadContext(hThread, &c))
 		return;
 
-	for (auto pHook : storage::get().filter_enabled(std::span{ pos, storage::get().end() }, enable))
+	for (auto pHook : storage::get( ).filter_enabled(std::span{pos, storage::get( ).end( )}, enable))
 	{
 		DWORD_PTR ip;
 
@@ -87,7 +87,7 @@ static void ProcessThreadIPs(HANDLE hThread, const hooks_storage::iterator& pos,
 #endif
 
 #ifdef _DEBUG_OFF
-status_ex::status_ex(status s) : status_ex_impl{ s }
+status_ex::status_ex(status s) : status_ex_impl{s}
 {
 	if (s == status::OK)
 		return;
@@ -96,7 +96,7 @@ status_ex::status_ex(status s) : status_ex_impl{ s }
 	const auto end = status_to_string(s);
 
 	std::string str;
-	str.reserve(start.size() + end.size());
+	str.reserve(start.size( ) + end.size( ));
 
 	str += start;
 	str += end;
@@ -105,12 +105,8 @@ status_ex::status_ex(status s) : status_ex_impl{ s }
 }
 #endif
 
-struct context::storage_type : std::vector<hook_entry>
-{
-};
-
 template <typename T>
-static auto _Find_hook_itr(T& storage, void* target)
+static auto _Find_hook_itr(&storage, void* target)
 {
 	runtime_assert(target != nullptr);
 	return std::ranges::find(storage, target, &hook_entry::target);
@@ -142,11 +138,11 @@ static hook_status _Set_hook_state_all(T& storage, bool enable, bool ignore_erro
 	//auto frozen = frozen_threads_storage(false);
 
 	auto storage_active = storage | std::views::filter([](const hook_entry& h)
-	{
-		return h.target( ) != nullptr;
-	});
+													   {
+														   return h.target( ) != nullptr;
+													   });
 	const auto begin = storage_active.begin( );
-	const auto end   = storage_active.end( );
+	const auto end = storage_active.end( );
 
 	for (auto itr_main = begin; itr_main != end; ++itr_main)
 	{
@@ -158,7 +154,7 @@ static hook_status _Set_hook_state_all(T& storage, bool enable, bool ignore_erro
 		if (pause_threads)
 		{
 			//fill only if any hook enabled
-			frozen.fill();
+			frozen.fill( );
 		}
 #endif
 
@@ -205,11 +201,7 @@ static hook_status _Set_hook_state_all(T& storage, bool enable, bool ignore_erro
 
 //--------
 
-context::context( )
-{
-	storage_ = std::make_unique<storage_type>( );
-}
-
+context::context( ) = default;
 context::~context( ) = default;
 
 hook_result context::create_hook(void* target, void* detour)
@@ -218,9 +210,9 @@ hook_result context::create_hook(void* target, void* detour)
 		return hook_status::ERROR_NOT_EXECUTABLE;
 
 #if 0
-	if (storage_->find(target) != nullptr)
+	if (storage_.find(target) != nullptr)
 		return hook_status::ERROR_ALREADY_CREATED;
-	if (storage_->find(pDetour) != nullptr)
+	if (storage_.find(pDetour) != nullptr)
 		return hook_status::ERROR_ALREADY_CREATED;
 #endif
 
@@ -231,13 +223,13 @@ hook_result context::create_hook(void* target, void* detour)
 	{
 		return checked == target || checked == detour;
 	};
-	for (const auto& value: *storage_)
+	for (const auto& value : storage_)
 	{
 		if (check_ptr_helper(value.target( )) || check_ptr_helper(value.detour( )))
 			return hook_status::ERROR_ALREADY_CREATED;
 	}
 
-	auto new_hook = hook_entry( );
+	hook_entry new_hook = {};
 
 	if (!new_hook.create(target, detour))
 		return hook_status::ERROR_UNSUPPORTED_FUNCTION;
@@ -255,14 +247,14 @@ hook_result context::create_hook(void* target, void* detour)
 		new_hook.init_backup(target, sizeof(JMP_REL));
 
 	hook_result ret = hook_status::OK;
-	ret.entry       = std::addressof(storage_->emplace_back(std::move(new_hook)));
+	ret.entry = std::addressof(storage_.emplace_back(std::move(new_hook)));
 
 	return ret;
 }
 
 hook_status context::remove_hook(void* target, bool force)
 {
-	const auto entry = _Find_hook(*storage_, target);
+	const auto entry = _Find_hook(storage_, target);
 	if (!entry)
 		return hook_status::ERROR_NOT_CREATED;
 
@@ -276,23 +268,23 @@ hook_status context::remove_hook(void* target, bool force)
 		entry->mark_disabled( );
 	}
 
-	storage_->erase(_Find_hook_itr(*storage_, target));
+	storage_.erase(_Find_hook_itr(storage_, target));
 	return hook_status::OK;
 }
 
 hook_status context::enable_hook(void* target)
 {
-	return _Set_hook_state(*storage_, target, true);
+	return _Set_hook_state(storage_, target, true);
 }
 
 hook_status context::disable_hook(void* target)
 {
-	return _Set_hook_state(*storage_, target, false);
+	return _Set_hook_state(storage_, target, false);
 }
 
 hook_result context::find_hook(void* target) const
 {
-	const auto entry = _Find_hook(*storage_, target);
+	const auto entry = _Find_hook(storage_, target);
 	if (!entry)
 		return hook_status::ERROR_NOT_CREATED;
 
@@ -316,41 +308,33 @@ auto minhook::create_hook_win_api(LPCWSTR pszModule, LPCSTR pszProcName, void* p
 #endif
 void context::remove_all_hooks( )
 {
-	_Set_hook_state_all(*storage_, false, true);
-	storage_->clear( );
+	_Set_hook_state_all(storage_, false, true);
+	storage_.clear( );
 }
 
 hook_status context::enable_all_hooks( )
 {
-	return _Set_hook_state_all(*storage_, true);
+	return _Set_hook_state_all(storage_, true);
 }
 
 hook_status context::disable_all_hooks( )
 {
-	return _Set_hook_state_all(*storage_, false);
+	return _Set_hook_state_all(storage_, false);
 }
 
-struct context_safe::impl : std::recursive_mutex, std::unique_ptr<basic_context>
+context_safe::context_safe(std::unique_ptr<basic_context> && ctx)
+	:ctx_(std::move(ctx))
 {
-	impl(std::unique_ptr<basic_context>&& ctx)
-		: std::recursive_mutex( ), std::unique_ptr<basic_context>(std::move(ctx))
-	{
-	}
-};
 
-context_safe::context_safe(std::unique_ptr<basic_context>&& ctx)
-{
-	impl_ = std::make_unique<impl>(std::move(ctx));
 }
 
-context_safe::~context_safe( )                                 = default;
-context_safe::context_safe(context_safe&&) noexcept            = default;
+context_safe::~context_safe( ) = default;
+context_safe::context_safe(context_safe&&) noexcept = default;
 context_safe& context_safe::operator=(context_safe&&) noexcept = default;
 
 #define LOCK_AND_WORK(_FN_,...) \
-	auto &ref = *impl_;\
-	const auto lock = std::scoped_lock(ref);\
-	return ref->_FN_(__VA_ARGS__)
+	const auto lock = std::scoped_lock(mtx_);\
+	return ctx_->_FN_(__VA_ARGS__)
 
 hook_result context_safe::create_hook(void* target, void* detour)
 {
@@ -394,27 +378,26 @@ hook_status context_safe::disable_all_hooks( )
 
 //--
 
-void current_context::set(std::shared_ptr<basic_context>&& ctx)
+void current_context::set(std::shared_ptr<basic_context> && ctx)
 {
-	auto& ref = get_ref( );
+	auto& ref = current_context_base::get( );
 	runtime_assert(ref == nullptr);
 	ref = std::move(ctx);
 }
 
 void current_context::reset( )
 {
-	auto& ref = get_ref( );
+	auto& ref = current_context_base::get( );
 	runtime_assert(ref != nullptr);
 	ref.reset( );
 }
 
-const std::shared_ptr<basic_context>& current_context::get( )
+const basic_context& current_context::get( )
 {
-	return get_ref( );
+	return *current_context_base::get( );
 }
 
-std::shared_ptr<basic_context>& current_context::get_ref( )
+auto current_context::share( )->const element_type&
 {
-	static std::shared_ptr<basic_context> ctx;
-	return ctx;
+	return current_context_base::get( );
 }

@@ -1,9 +1,10 @@
-#pragma once
+module;
 
-#include <cstdint>
 #include <string_view>
 
-namespace dhooks
+export module dhooks:status;
+
+export namespace dhooks
 {
     enum class hook_status:uint8_t
     {

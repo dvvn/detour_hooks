@@ -1,6 +1,13 @@
-#pragma once
+module;
 
-#include <memory>
+#include <nstd/one_instance.h>
+
+#include <vector>
+#include <mutex>
+
+export module dhooks:context;
+export import :status;
+export import :entry;
 
 namespace dhooks
 {
@@ -38,6 +45,8 @@ namespace dhooks
 	class context final : public basic_context
 	{
 	public:
+		using value_type = std::vector<hook_entry>;
+
 		context( );
 		~context( ) override;
 
@@ -51,16 +60,14 @@ namespace dhooks
 		hook_status disable_all_hooks( ) override;
 
 	private:
-		struct storage_type;
-		std::unique_ptr<storage_type> storage_;
+		value_type storage_;
 	};
 
 	class context_safe final : public basic_context
 	{
 	public:
 		context_safe(std::unique_ptr<basic_context>&& ctx);
-		template <std::derived_from<context_safe> T>
-		context_safe(std::unique_ptr<T>&& ctx) = delete;
+		context_safe(std::unique_ptr<context_safe>&& ctx) = delete;
 
 		~context_safe( ) override;
 		context_safe(context_safe&&) noexcept;
@@ -76,22 +83,20 @@ namespace dhooks
 		hook_status disable_all_hooks( ) override;
 
 	private:
-		struct impl;
-		std::unique_ptr<impl> impl_;
+		std::unique_ptr<basic_context> ctx_;
+		std::recursive_mutex mtx_;
 	};
 
-	struct current_context
+	using current_context_base = nstd::one_instance<std::shared_ptr<basic_context>>;
+	struct current_context :current_context_base
 	{
-		current_context(const current_context& other)                = delete;
-		current_context(current_context&& other) noexcept            = delete;
-		current_context& operator=(const current_context& other)     = delete;
-		current_context& operator=(current_context&& other) noexcept = delete;
-
-		static void set(std::shared_ptr<basic_context>&& ctx);
+		static void set(element_type&& ctx);
 		static void reset( );
-		static const std::shared_ptr<basic_context>& get( );
+		static basic_context& get( );
+		static const element_type& share( );
 	private:
-		static std::shared_ptr<basic_context>& get_ref( );
+		using current_context_base::get;
+		using current_context_base::get_ptr;
 	};
 
 #if 0
