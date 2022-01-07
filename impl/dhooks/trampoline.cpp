@@ -9,12 +9,12 @@
 
 module;
 
+#include "hde/include.h"
 #include <nstd/mem/block_includes.h>
 #include <Windows.h>
 #include <vector>
 
 module dhooks:trampoline;
-import :hde;
 
 using namespace dhooks;
 
@@ -28,8 +28,8 @@ bool trampoline2::fix_page_protection( )
 {
 	runtime_assert(!old_protection_.has_value( ));
 
-	const auto buff = trampoline_.data( );
-	const auto buff_size = trampoline_.size( );
+	const auto buff = trampoline.data( );
+	const auto buff_size = trampoline.size( );
 
 	if (!nstd::mem::block(buff, buff_size).executable( ))
 	{
@@ -46,12 +46,10 @@ bool trampoline2::fix_page_protection( )
 	return true;
 }
 
-bool trampoline2::create(LPVOID target, LPVOID detour)
+bool trampoline2::create(void* target, void* detour)
 {
-	auto& ct = *this->impl_;
-
-	ct.target = target;
-	ct.detour = detour;
+	this->target = target;
+	this->detour = detour;
 
 #if defined(_M_X64) || defined(__x86_64__)
 	CALL_ABS call = {
@@ -83,31 +81,33 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 	};
 #endif
 
-	UINT8 old_pos = 0;
-	UINT8 new_pos = 0;
+	uint8_t old_pos = 0;
+	uint8_t new_pos = 0;
 	ULONG_PTR jmp_dest = 0;     // Destination address of an internal jump.
 	bool finished = false; // Is the function completed?
 #if defined(_M_X64) || defined(__x86_64__)
-	UINT8 instBuf[16];
+	uint8_t instBuf[16];
 #endif
 
 	//ct.patch_above = false;
 	//ct.ips_count   = 0;
+
+	using namespace hde;
+	using namespace nstd::mem;
 
 	do
 	{
 		HDE_data hs;
 		uint8_t copy_size = 0;
 		ULONG_PTR new_inst;
-		const auto old_inst = reinterpret_cast<ULONG_PTR>(ct.target) + old_pos;
+		const auto old_inst = reinterpret_cast<ULONG_PTR>(target) + old_pos;
+		const auto old_inst_test = address(target) + (old_pos);
 
 		// ReSharper disable once CppInconsistentNaming
 		const auto _Set_copy_size = [&](uint8_t size)
 		{
 			if (copy_size < size)
 			{
-				auto& tr = ct.trampoline;
-
 				const auto size_diff = size - copy_size;
 				/*const auto pad       = [&]( )-> size_t
 				{
@@ -119,18 +119,18 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 						return estimate_size % delim;
 					return 0;
 				}( );*/
-				tr.insert(std::next(tr.begin( ), new_pos + copy_size), size_diff /*+ pad*/, -1);
+				trampoline.insert(std::next(trampoline.begin( ), new_pos + copy_size), size_diff /*+ pad*/, -1);
 
-				new_inst = reinterpret_cast<ULONG_PTR>(tr.data( )) + new_pos;
+				new_inst = reinterpret_cast<ULONG_PTR>(trampoline.data( )) + new_pos;
 			}
 			copy_size = size;
 		};
 
-		_Set_copy_size(_HDE_disasm(reinterpret_cast<LPVOID>(old_inst), &hs));
+		_Set_copy_size(_HDE_disasm(reinterpret_cast<void*>(old_inst), &hs));
 		if (hs.flags & hde::F_ERROR)
 			return false;
 
-		auto copy_src = reinterpret_cast<LPVOID>(old_inst);
+		auto copy_src = reinterpret_cast<void*>(old_inst);
 		if (old_pos >= sizeof(JMP_REL))
 		{
 			copy_src = &jmp;
@@ -141,7 +141,7 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 #if defined(_M_X64) || defined(__x86_64__)
 			jmp.address = old_inst;
 #else
-			jmp.operand = static_cast<UINT32>(old_inst - (new_inst + copy_size));
+			jmp.operand = static_cast<uint32_t>(old_inst - (new_inst + copy_size));
 #endif
 
 			finished = true;
@@ -152,7 +152,7 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 			// Instructions using RIP relative addressing. (ModR/M = 00???101B)
 
 			// Modify the RIP relative address.
-			PUINT32 pRelAddr;
+			uint32_t* pRelAddr;
 
 			// Avoid using memcpy to reduce the footprint.
 			std::memcpy(instBuf, (LPBYTE)old_inst, copy_size);
@@ -160,8 +160,8 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 			copy_src = instBuf;
 
 			// Relative address is stored at (instruction length - immediate value length - 4).
-			pRelAddr = (PUINT32)(instBuf + hs.len - ((hs.flags & 0x3C) >> 2) - 4);
-			*pRelAddr = static_cast<UINT32>(old_inst + hs.len + static_cast<INT32>(hs.disp.disp32) - (new_inst + hs.len));
+			pRelAddr = (uint32_t*)(instBuf + hs.len - ((hs.flags & 0x3C) >> 2) - 4);
+			*pRelAddr = static_cast<uint32_t>(old_inst + hs.len + static_cast<INT32>(hs.disp.disp32) - (new_inst + hs.len));
 
 			// Complete the function if JMP (FF /4).
 			if (hs.opcode == 0xFF && hs.modrm_reg == 4)
@@ -178,7 +178,7 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 #if defined(_M_X64) || defined(__x86_64__)
 			call.address = dest;
 #else
-			call.operand = static_cast<UINT32>(dest - (new_inst + copy_size));
+			call.operand = static_cast<uint32_t>(dest - (new_inst + copy_size));
 #endif
 		}
 		else if ((hs.opcode & 0xFD) == 0xE9)
@@ -192,7 +192,7 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 				dest += static_cast<INT32>(hs.imm.imm32);
 
 			// Simply copy an internal jump.
-			if (reinterpret_cast<ULONG_PTR>(ct.target) <= dest && dest < reinterpret_cast<ULONG_PTR>(ct.target) + sizeof(JMP_REL))
+			if (reinterpret_cast<ULONG_PTR>(target) <= dest && dest < reinterpret_cast<ULONG_PTR>(target) + sizeof(JMP_REL))
 			{
 				if (jmp_dest < dest)
 					jmp_dest = dest;
@@ -205,7 +205,7 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 #if defined(_M_X64) || defined(__x86_64__)
 				jmp.address = dest;
 #else
-				jmp.operand = static_cast<UINT32>(dest - (new_inst + copy_size));
+				jmp.operand = static_cast<uint32_t>(dest - (new_inst + copy_size));
 #endif
 
 				// Exit the function If it is not in the branch
@@ -226,7 +226,7 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 				dest += static_cast<INT32>(hs.imm.imm32);
 
 			// Simply copy an internal jump.
-			if (reinterpret_cast<ULONG_PTR>(ct.target) <= dest && dest < reinterpret_cast<ULONG_PTR>(ct.target) + sizeof(JMP_REL))
+			if (reinterpret_cast<ULONG_PTR>(target) <= dest && dest < reinterpret_cast<ULONG_PTR>(target) + sizeof(JMP_REL))
 			{
 				if (jmp_dest < dest)
 					jmp_dest = dest;
@@ -241,14 +241,14 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 				copy_src = &jcc;
 				_Set_copy_size(sizeof(decltype(jcc)));
 
-				const UINT8 cond = (hs.opcode != 0x0F ? hs.opcode : hs.opcode2) & 0x0F;
+				const uint8_t cond = (hs.opcode != 0x0F ? hs.opcode : hs.opcode2) & 0x0F;
 #if defined(_M_X64) || defined(__x86_64__)
 				// Invert the condition in x64 mode to simplify the conditional jump logic.
 				jcc.opcode = 0x71 ^ cond;
 				jcc.address = dest;
 #else
 				jcc.opcode1 = 0x80 | cond;
-				jcc.operand = static_cast<UINT32>(dest - (new_inst + copy_size));
+				jcc.operand = static_cast<uint32_t>(dest - (new_inst + copy_size));
 #endif
 			}
 		}
@@ -274,32 +274,31 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 			return false;
 #endif
 
-		ct.old_ips.push_back(old_pos);
-		ct.new_ips.push_back(new_pos);
+		old_ips_.push_back(old_pos);
+		new_ips_.push_back(new_pos);
 
-		std::memcpy(reinterpret_cast<LPVOID>(new_inst), copy_src, copy_size);
+		std::memcpy(reinterpret_cast<void*>(new_inst), copy_src, copy_size);
 
 		new_pos += copy_size;
 		old_pos += hs.len;
 	}
 	while (!finished);
 
-	using namespace nstd;
 
 	// Is there enough place for a long jump?
-	if (old_pos < sizeof(JMP_REL) && !mem::block(address(ct.target) + old_pos, sizeof(JMP_REL) - old_pos).code_padding( ))
+	if (old_pos < sizeof(JMP_REL) && !block(address(target) + old_pos, sizeof(JMP_REL) - old_pos).code_padding( ))
 	{
 		// Is there enough place for a short jump?
-		if (old_pos < sizeof(JMP_REL_SHORT) && !mem::block(address(ct.target) + old_pos, sizeof(JMP_REL_SHORT) - old_pos).code_padding( ))
+		if (old_pos < sizeof(JMP_REL_SHORT) && !block(address(target) + old_pos, sizeof(JMP_REL_SHORT) - old_pos).code_padding( ))
 			return false;
 
 		// Can we place the long jump above the function?
-		if (!mem::block(address(ct.target) - sizeof(JMP_REL)).executable( ))
+		if (!block(address(target) - sizeof(JMP_REL)).executable( ))
 			return false;
-		if (!mem::block(address(ct.target) - sizeof(JMP_REL), sizeof(JMP_REL)).code_padding( ))
+		if (!block(address(target) - sizeof(JMP_REL), sizeof(JMP_REL)).code_padding( ))
 			return false;
 
-		ct.patch_above = true;
+		patch_above = true;
 	}
 
 #if defined(_M_X64) || defined(__x86_64__)
@@ -312,24 +311,4 @@ bool trampoline2::create(LPVOID target, LPVOID detour)
 #endif
 
 	return true;
-}
-
-bool trampoline2::patch_above( ) const
-{
-	return patch_above_;
-}
-
-LPVOID trampoline2::target( ) const
-{
-	return target_;
-}
-
-LPVOID trampoline2::detour( ) const
-{
-	return detour_;
-}
-
-UINT8* trampoline2::trampoline( ) const
-{
-	return trampoline_.data( );
 }

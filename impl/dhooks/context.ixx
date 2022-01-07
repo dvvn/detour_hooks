@@ -9,11 +9,8 @@ export module dhooks:context;
 export import :status;
 export import :entry;
 
-namespace dhooks
+export namespace dhooks
 {
-	enum class hook_status : uint8_t;
-	class hook_entry;
-
 	struct hook_result
 	{
 		template <std::convertible_to<hook_status> T>
@@ -47,8 +44,7 @@ namespace dhooks
 	public:
 		using value_type = std::vector<hook_entry>;
 
-		context( );
-		~context( ) override;
+		context( ) = default;
 
 		hook_result create_hook(void* target, void* detour) override;
 		hook_status remove_hook(void* target, bool force) override;
@@ -69,10 +65,6 @@ namespace dhooks
 		context_safe(std::unique_ptr<basic_context>&& ctx);
 		context_safe(std::unique_ptr<context_safe>&& ctx) = delete;
 
-		~context_safe( ) override;
-		context_safe(context_safe&&) noexcept;
-		context_safe& operator=(context_safe&&) noexcept;
-
 		hook_result create_hook(void* target, void* detour) override;
 		hook_status remove_hook(void* target, bool force) override;
 		hook_status enable_hook(void* target) override;
@@ -84,19 +76,18 @@ namespace dhooks
 
 	private:
 		std::unique_ptr<basic_context> ctx_;
-		std::recursive_mutex mtx_;
+		mutable std::recursive_mutex mtx_;
 	};
 
 	using current_context_base = nstd::one_instance<std::shared_ptr<basic_context>>;
-	struct current_context :current_context_base
+	struct current_context
 	{
+		using element_type = current_context_base::element_type;
+
 		static void set(element_type&& ctx);
 		static void reset( );
 		static basic_context& get( );
 		static const element_type& share( );
-	private:
-		using current_context_base::get;
-		using current_context_base::get_ptr;
 	};
 
 #if 0

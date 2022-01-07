@@ -9,9 +9,8 @@ export import :status;
 
 export namespace dhooks
 {
-	class hook_entry final : public trampoline2
+	struct hook_entry final : trampoline2
 	{
-	public:
 		hook_entry( );
 		~hook_entry( ) override;
 
@@ -20,11 +19,9 @@ export namespace dhooks
 
 		hook_status set_state(bool enable);
 
-		bool enabled( ) const;
 		void init_backup(LPVOID from, size_t bytes_count);
-		void mark_disabled( );
+		bool enabled = false;
 	private:
-		bool enabled_ = false;
 		std::vector<uint8_t> backup_;
 	};
 }

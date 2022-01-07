@@ -12,15 +12,15 @@ hook_holder_data::hook_holder_data( )
 	const auto& sctx = current_context::share( );
 	runtime_assert(sctx != nullptr, "Context isn't set!");
 	wctx = sctx;
-} 
+}
 
 hook_holder_data::~hook_holder_data( )
 {
 	unhook( );
 }
 
-hook_holder_data::hook_holder_data(hook_holder_data&&) noexcept = default;
-hook_holder_data& hook_holder_data::operator=(hook_holder_data&&) noexcept = default;
+//hook_holder_data::hook_holder_data(hook_holder_data&&) noexcept = default;
+//hook_holder_data& hook_holder_data::operator=(hook_holder_data&&) noexcept = default;
 
 bool hook_holder_data::hook( )
 {
@@ -45,11 +45,11 @@ bool hook_holder_data::hook( )
 
 	if (result.status != hook_status::OK)
 	{
-		runtime_assert(std::format("Unable to hook function: {}", hook_status_to_string(result.status)).c_str( ));
-		return nullptr;
+		//runtime_assert(std::string("Unable to hook function: ").append(hook_status_to_string(result.status)).c_str( ));
+		return false;
 	}
 
-	const auto original = result.entry->trampoline( )/*._Unchecked_begin( )*/;
+	const auto original = result.entry->trampoline.data( );
 	if (!original)
 		return false;
 	this->set_original_func(original);
@@ -147,7 +147,7 @@ bool hook_holder_data::enabled( ) const
 
 	if (hook.status != hook_status::OK)
 		return false;
-	return hook.entry->enabled( );
+	return hook.entry->enabled;
 }
 
 bool hook_holder_data::unhook_after_call_if_wanted( )

@@ -42,8 +42,9 @@ static constexpr auto _Status_to_string_cache = []
 #undef STATUS_STR
 
 #ifdef _DEBUG
-	for (const auto& key : data | std::views::keys)
+	for (const auto& pair : data)
 	{
+		auto& key = pair.first;
 		if (key == std::remove_cvref_t<decltype(key)>( ))
 		{
 			if (std::is_constant_evaluated( ))

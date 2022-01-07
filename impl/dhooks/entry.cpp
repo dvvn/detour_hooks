@@ -14,7 +14,7 @@ using namespace dhooks;
 
 hook_entry::~hook_entry( )
 {
-	runtime_assert(enabled_ == false, "Unable to destroy enabled hook entry!");
+	runtime_assert(enabled == false, "Unable to destroy enabled hook entry!");
 }
 
 hook_entry::hook_entry(hook_entry&& other) noexcept
@@ -25,21 +25,19 @@ hook_entry::hook_entry(hook_entry&& other) noexcept
 hook_entry& hook_entry::operator=(hook_entry&& other) noexcept
 {
 	*static_cast<trampoline2*>(this) = static_cast<trampoline2&&>(other);
-	enabled_ = other.enabled_;
-	other.enabled_ = false;
+	enabled = other.enabled;
+	other.enabled = false;
 	backup_ = std::move(other.backup_);
 	return *this;
 }
 
 hook_status hook_entry::set_state(bool enable)
 {
-	if (this->enabled( ) == enable)
+	if (this->enabled == enable)
 		return enable ? hook_status::ERROR_ENABLED : hook_status::ERROR_DISABLED;
 
-	auto patch_target = static_cast<LPBYTE>(this->target( ));
+	auto patch_target = static_cast<LPBYTE>(this->target);
 	SIZE_T patch_size = sizeof(JMP_REL);
-
-	const auto patch_above = this->patch_above( );
 
 	if (patch_above)
 	{
@@ -60,10 +58,10 @@ hook_status hook_entry::set_state(bool enable)
 		{
 			const auto jmp_rel = reinterpret_cast<JMP_REL*>(patch_target);
 			jmp_rel->opcode = 0xE9;
-			jmp_rel->operand = static_cast<UINT32>(static_cast<LPBYTE>(this->detour( )) - (patch_target + sizeof(JMP_REL)));
+			jmp_rel->operand = static_cast<UINT32>(static_cast<LPBYTE>(this->detour) - (patch_target + sizeof(JMP_REL)));
 			if (patch_above)
 			{
-				const auto short_jmp = static_cast<JMP_REL_SHORT*>(this->target( ));
+				const auto short_jmp = static_cast<JMP_REL_SHORT*>(this->target);
 				short_jmp->opcode = 0xEB;
 				short_jmp->operand = static_cast<UINT8>(0 - (sizeof(JMP_REL_SHORT) + sizeof(JMP_REL)));
 			}
@@ -94,14 +92,9 @@ hook_status hook_entry::set_state(bool enable)
 	// Just-in-case measure.
 	FlushInstructionCache(GetCurrentProcess( ), patch_target, patch_size);
 
-	enabled_ = enable;
+	enabled = enable;
 
 	return hook_status::OK;
-}
-
-bool hook_entry::enabled( ) const
-{
-	return enabled_;
 }
 
 void hook_entry::init_backup(LPVOID from, size_t bytes_count)
@@ -109,9 +102,4 @@ void hook_entry::init_backup(LPVOID from, size_t bytes_count)
 	runtime_assert(backup_.empty( ));
 	auto rng = nstd::mem::block(from, bytes_count);
 	backup_.assign(rng.begin( ), rng.end( ));
-}
-
-void hook_entry::mark_disabled( )
-{
-	enabled_ = false;
 }

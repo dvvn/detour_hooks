@@ -48,21 +48,7 @@ void** _Ptr_to_vtable(C* instance)
     DHOOKS_POINTER_TO_CLASS_METHOD0(_CALL_CVS_, )\
     DHOOKS_POINTER_TO_CLASS_METHOD0(_CALL_CVS_,const)
 
-export namespace dhooks
-{
-	enum class call_conversion
-	{
-		// ReSharper disable CppInconsistentNaming
-		thiscall__
-		, cdecl__
-		, stdcall__
-		, vectorcall__
-		, fastcall__
-		// ReSharper restore CppInconsistentNaming
-	};
-
-	DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_POINTER_TO_CLASS_METHOD);
-}
+DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_POINTER_TO_CLASS_METHOD);
 
 template <typename Fn_as, typename Arg2, typename Arg1, typename ...Args>
 decltype(auto) _Call_fn_as_fastcall(Fn_as callable, Arg2 arg2, Arg1 arg1, Args&& ...args)
@@ -83,7 +69,7 @@ decltype(auto) _Call_fn_as(Fn_old func_ptr, Args&& ...args)
 
 #define DHOOKS_CALL_CLASS_FN0(_CALL_CVS_IN_,_CALL_CVS_OUT_,_CONST_,...) \
     template <typename Ret, typename C, typename ...Args>\
-    Ret _Call_function(Ret (__##_CALL_CVS_IN_ C::*fn)(Args ...) _CONST_, _CONST_ C* instance, std::type_identity_t<Args> ...args)\
+    Ret call_function(Ret (__##_CALL_CVS_IN_ C::*fn)(Args ...) _CONST_, _CONST_ C* instance, std::type_identity_t<Args> ...args)\
     {\
         using fn_t = Ret(__##_CALL_CVS_OUT_*)(_CONST_ C*,##__VA_ARGS__, Args ...);\
         return _Call_fn_as<fn_t>(fn, instance, args...);\
@@ -114,24 +100,24 @@ decltype(auto) _Call_virtual_fn(Fn fn, C* instance, size_t index, Args&& ...args
 	auto real_fn = vtable[index];
 
 	reinterpret_cast<void*&>(fn) = real_fn;
-	return _Call_function(fn, instance, std::forward<Args>(args)...);
+	return dhooks::call_function(fn, instance, std::forward<Args>(args)...);
 }
 
 #define DHOOKS_CALL_VIRTUAL_FN(_CALL_CVS_) \
     template <typename Ret, typename C, typename ...Args>\
-    Ret _Call_function(Ret (__##_CALL_CVS_ C::*fn_sample)(Args ...), C* instance, size_t index, std::type_identity_t<Args> ...args)\
+    Ret call_function(Ret (__##_CALL_CVS_ C::*fn_sample)(Args ...), C* instance, size_t index, std::type_identity_t<Args> ...args)\
     {\
         return _Call_virtual_fn(fn_sample, instance, index, std::forward<Args>(args)...);\
     }\
     template <typename Ret, typename C, typename ...Args>\
-    Ret _Call_function(Ret (__##_CALL_CVS_ C::*fn_sample)(Args ...) const,const C* instance, size_t index, std::type_identity_t<Args> ...args)\
+    Ret call_function(Ret (__##_CALL_CVS_ C::*fn_sample)(Args ...) const,const C* instance, size_t index, std::type_identity_t<Args> ...args)\
     {\
         return _Call_virtual_fn(fn_sample, instance, index, std::forward<Args>(args)...);\
     }
 
 #define DHOOKS_CALL_STATIC_FN(_CALL_CVS_) \
     template <typename Ret, typename ...Args>\
-    Ret _Call_function(Ret (__##_CALL_CVS_*fn)(Args ...), std::type_identity_t<Args> ...args)\
+    Ret call_function(Ret (__##_CALL_CVS_*fn)(Args ...), std::type_identity_t<Args> ...args)\
     {\
         return std::invoke(fn, std::forward<Args>(args)...);\
     }
@@ -144,6 +130,17 @@ export namespace dhooks
 
 export namespace dhooks
 {
+	enum class call_conversion
+	{
+		// ReSharper disable CppInconsistentNaming
+		thiscall__
+		, cdecl__
+		, stdcall__
+		, vectorcall__
+		, fastcall__
+		// ReSharper restore CppInconsistentNaming
+	};
+
 	struct __declspec(novtable) original_func_setter
 	{
 		virtual ~original_func_setter( ) = default;
@@ -220,7 +217,7 @@ export namespace dhooks
 	{\
 		Ret (__##_CALL_CVS_ C::*original_fn)(Args ...) = nullptr;\
     public:\
-		Ret call_original(Args ...args){ return _Call_function(original_fn, this->get_object_instance( ), args...); }\
+		Ret call_original(Args ...args){ return call_function(original_fn, this->get_object_instance( ), args...); }\
         void set_original_func(void* fn) final { reinterpret_cast<void*&>(original_fn) = fn; }\
 	};
 
@@ -231,7 +228,7 @@ export namespace dhooks
 	{\
 		Ret (__##_CALL_CVS_ *original_fn)(Args ...) = nullptr;\
     public:\
-		Ret call_original(Args ...args) { return _Call_function(original_fn, args...); }\
+		Ret call_original(Args ...args) { return call_function(original_fn, args...); }\
         void set_original_func(void* fn) final { reinterpret_cast<void*&>(original_fn) = fn; }\
 	};
 
@@ -343,7 +340,7 @@ export namespace dhooks
 	class __declspec(novtable) hook_holder_data : protected virtual original_func_setter
 	{
 		mutable std::mutex mtx;
-		std::atomic_bool active = false;
+		std::atomic<bool> active = false;
 		std::weak_ptr<basic_context> wctx;
 
 		std::shared_ptr<basic_context> get_ctx( )const
@@ -374,8 +371,8 @@ export namespace dhooks
 		~hook_holder_data( ) override;
 
 	public:
-		hook_holder_data(hook_holder_data&&) noexcept;
-		hook_holder_data& operator=(hook_holder_data&&) noexcept;
+		/*hook_holder_data(hook_holder_data&&) noexcept;
+		hook_holder_data& operator=(hook_holder_data&&) noexcept;*/
 
 		bool hook( );
 		bool unhook( );

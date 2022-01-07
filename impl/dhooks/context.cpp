@@ -13,7 +13,7 @@ module;
 #endif
 
 module dhooks:context;
-import nstd.mem.block;
+import nstd.mem;
 
 using namespace dhooks;
 
@@ -106,14 +106,14 @@ status_ex::status_ex(status s) : status_ex_impl{s}
 #endif
 
 template <typename T>
-static auto _Find_hook_itr(&storage, void* target)
+static auto _Find_hook_itr(T& storage, void* target)
 {
 	runtime_assert(target != nullptr);
 	return std::ranges::find(storage, target, &hook_entry::target);
 }
 
 template <typename T>
-static hook_entry* _Find_hook(T& storage, void* target)
+static auto _Find_hook(T& storage, void* target)
 {
 	auto itr = _Find_hook_itr(storage, target);
 	return itr == storage.end( ) ? nullptr : std::addressof(*itr);
@@ -122,11 +122,11 @@ static hook_entry* _Find_hook(T& storage, void* target)
 template <typename T>
 static hook_status _Set_hook_state(T& storage, void* target, bool enable)
 {
-	hook_entry* const entry = _Find_hook(storage, target);
+	auto entry = _Find_hook(storage, target);
 	if (!entry)
 		return hook_status::ERROR_NOT_CREATED;
 
-	if (entry->enabled( ) == enable)
+	if (entry->enabled == enable)
 		return enable ? hook_status::ERROR_ENABLED : hook_status::ERROR_DISABLED;
 
 	return entry->set_state(enable);
@@ -139,7 +139,7 @@ static hook_status _Set_hook_state_all(T& storage, bool enable, bool ignore_erro
 
 	auto storage_active = storage | std::views::filter([](const hook_entry& h)
 													   {
-														   return h.target( ) != nullptr;
+														   return h.target != nullptr;
 													   });
 	const auto begin = storage_active.begin( );
 	const auto end = storage_active.end( );
@@ -147,7 +147,7 @@ static hook_status _Set_hook_state_all(T& storage, bool enable, bool ignore_erro
 	for (auto itr_main = begin; itr_main != end; ++itr_main)
 	{
 		auto& value = *itr_main;
-		if (value.enabled( ) == enable)
+		if (value.enabled == enable)
 			continue;
 
 #if 0
@@ -185,7 +185,7 @@ static hook_status _Set_hook_state_all(T& storage, bool enable, bool ignore_erro
 		for (auto itr_child = begin; itr_child != itr_main; ++itr_child)
 		{
 			auto& value_child = *itr_child;
-			if (value_child.enabled( ) == enable)
+			if (value_child.enabled == enable)
 				continue;
 			if (const auto temp_status = value_child.set_state(enable); temp_status != hook_status::OK)
 			{
@@ -200,9 +200,6 @@ static hook_status _Set_hook_state_all(T& storage, bool enable, bool ignore_erro
 }
 
 //--------
-
-context::context( ) = default;
-context::~context( ) = default;
 
 hook_result context::create_hook(void* target, void* detour)
 {
@@ -225,7 +222,7 @@ hook_result context::create_hook(void* target, void* detour)
 	};
 	for (const auto& value : storage_)
 	{
-		if (check_ptr_helper(value.target( )) || check_ptr_helper(value.detour( )))
+		if (check_ptr_helper(value.target) || check_ptr_helper(value.detour))
 			return hook_status::ERROR_ALREADY_CREATED;
 	}
 
@@ -241,8 +238,8 @@ hook_result context::create_hook(void* target, void* detour)
 #endif
 	// Back up the target function.
 
-	if (new_hook.patch_above( ))
-		new_hook.init_backup((static_cast<LPBYTE>(target) - sizeof(JMP_REL)), sizeof(JMP_REL) + sizeof(JMP_REL_SHORT));
+	if (new_hook.patch_above)
+		new_hook.init_backup(static_cast<LPBYTE>(target) - sizeof(JMP_REL), sizeof(JMP_REL) + sizeof(JMP_REL_SHORT));
 	else
 		new_hook.init_backup(target, sizeof(JMP_REL));
 
@@ -258,14 +255,14 @@ hook_status context::remove_hook(void* target, bool force)
 	if (!entry)
 		return hook_status::ERROR_NOT_CREATED;
 
-	if (entry->enabled( ))
+	if (entry->enabled)
 	{
 		if (const auto status = entry->set_state(false); status != hook_status::OK)
 		{
 			if (!force || status != hook_status::ERROR_MEMORY_PROTECT)
 				return status;
 		}
-		entry->mark_disabled( );
+		entry->enabled = false;
 	}
 
 	storage_.erase(_Find_hook_itr(storage_, target));
@@ -289,7 +286,7 @@ hook_result context::find_hook(void* target) const
 		return hook_status::ERROR_NOT_CREATED;
 
 	hook_result result(hook_status::OK);
-	result.entry = /*boost::addressof(entry->second)*/entry;
+	result.entry = const_cast<hook_entry*>(entry);
 	return result;
 }
 #if 0
@@ -327,10 +324,6 @@ context_safe::context_safe(std::unique_ptr<basic_context> && ctx)
 {
 
 }
-
-context_safe::~context_safe( ) = default;
-context_safe::context_safe(context_safe&&) noexcept = default;
-context_safe& context_safe::operator=(context_safe&&) noexcept = default;
 
 #define LOCK_AND_WORK(_FN_,...) \
 	const auto lock = std::scoped_lock(mtx_);\
@@ -392,7 +385,7 @@ void current_context::reset( )
 	ref.reset( );
 }
 
-const basic_context& current_context::get( )
+basic_context& current_context::get( )
 {
 	return *current_context_base::get( );
 }
