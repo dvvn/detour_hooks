@@ -94,14 +94,14 @@ bool trampoline2::create(void* target, void* detour)
 
 	using namespace hde;
 	using namespace nstd::mem;
-
+	 
 	do
-	{
+	{ 
 		HDE_data hs;
 		uint8_t copy_size = 0;
 		ULONG_PTR new_inst;
 		const auto old_inst = reinterpret_cast<ULONG_PTR>(target) + old_pos;
-		const auto old_inst_test = address(target) + (old_pos);
+		//const address old_inst = old_pos ? address(target) + old_pos : target;
 
 		// ReSharper disable once CppInconsistentNaming
 		const auto _Set_copy_size = [&](uint8_t size)

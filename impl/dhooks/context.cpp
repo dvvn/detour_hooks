@@ -319,7 +319,7 @@ hook_status context::disable_all_hooks( )
 	return _Set_hook_state_all(storage_, false);
 }
 
-context_safe::context_safe(std::unique_ptr<basic_context> && ctx)
+context_safe::context_safe(std::unique_ptr<basic_context>&& ctx)
 	:ctx_(std::move(ctx))
 {
 
@@ -371,7 +371,7 @@ hook_status context_safe::disable_all_hooks( )
 
 //--
 
-void current_context::set(std::shared_ptr<basic_context> && ctx)
+void current_context::set(element_type&& ctx)
 {
 	auto& ref = current_context_base::get( );
 	runtime_assert(ref == nullptr);

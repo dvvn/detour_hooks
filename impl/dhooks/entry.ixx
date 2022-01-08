@@ -1,6 +1,5 @@
 module;
 
-#include <windows.h>
 #include <vector>
 
 export module dhooks:entry;
@@ -19,7 +18,7 @@ export namespace dhooks
 
 		hook_status set_state(bool enable);
 
-		void init_backup(LPVOID from, size_t bytes_count);
+		void init_backup(void* from, size_t bytes_count);
 		bool enabled = false;
 	private:
 		std::vector<uint8_t> backup_;

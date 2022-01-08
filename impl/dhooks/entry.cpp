@@ -12,17 +12,19 @@ import nstd.mem;
 
 using namespace dhooks;
 
+hook_entry::hook_entry( ) = default;
+
 hook_entry::~hook_entry( )
 {
 	runtime_assert(enabled == false, "Unable to destroy enabled hook entry!");
 }
 
-hook_entry::hook_entry(hook_entry&& other) noexcept
+hook_entry::hook_entry(hook_entry && other) noexcept
 {
 	*this = std::move(other);
 }
 
-hook_entry& hook_entry::operator=(hook_entry&& other) noexcept
+hook_entry& hook_entry::operator=(hook_entry && other) noexcept
 {
 	*static_cast<trampoline2*>(this) = static_cast<trampoline2&&>(other);
 	enabled = other.enabled;
@@ -97,7 +99,7 @@ hook_status hook_entry::set_state(bool enable)
 	return hook_status::OK;
 }
 
-void hook_entry::init_backup(LPVOID from, size_t bytes_count)
+void hook_entry::init_backup(void* from, size_t bytes_count)
 {
 	runtime_assert(backup_.empty( ));
 	auto rng = nstd::mem::block(from, bytes_count);

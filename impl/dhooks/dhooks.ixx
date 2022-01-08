@@ -337,8 +337,25 @@ export namespace dhooks
 		}
 	};
 
+	struct hook_holder_data_after_call
+	{
+		std::atomic<bool> unhook;
+		std::atomic<bool> disable;
+
+		hook_holder_data_after_call( )
+		{
+			reset( );
+		}
+
+		void reset( )
+		{
+			unhook = disable = false;
+		}
+	};
+
 	class __declspec(novtable) hook_holder_data : protected virtual original_func_setter
 	{
+		//todo: drop it if context is safe
 		mutable std::mutex mtx;
 		std::atomic<bool> active = false;
 		std::weak_ptr<basic_context> wctx;
@@ -352,16 +369,7 @@ export namespace dhooks
 #endif
 		}
 
-		struct
-		{
-			std::atomic_bool unhook = false;
-			std::atomic_bool disable = false;
-
-			void reset( )
-			{
-				unhook = disable = false;
-			}
-		} after_call;
+		hook_holder_data_after_call after_call;
 
 		void* target = nullptr;
 		void* replace = nullptr;

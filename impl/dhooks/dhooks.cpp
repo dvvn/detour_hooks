@@ -7,12 +7,7 @@ module;
 module dhooks;
 using namespace dhooks;
 
-hook_holder_data::hook_holder_data( )
-{
-	const auto& sctx = current_context::share( );
-	runtime_assert(sctx != nullptr, "Context isn't set!");
-	wctx = sctx;
-}
+hook_holder_data::hook_holder_data( ) = default;
 
 hook_holder_data::~hook_holder_data( )
 {
@@ -33,6 +28,14 @@ bool hook_holder_data::hook( )
 	return true;*/
 
 	const auto lock = std::scoped_lock(mtx);
+
+	if (wctx.expired( ))
+	{
+		const auto& sctx = current_context::share( );
+		runtime_assert(sctx != nullptr, "Context isn't set!");
+		wctx = sctx;
+	}
+
 	runtime_assert(!active);
 	active = true;
 	runtime_assert(!target);
