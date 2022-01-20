@@ -37,9 +37,9 @@ void** _Ptr_to_vtable(C* instance)
 }
 #endif
 
-#define DHOOKS_POINTER_TO_CLASS_METHOD0(_CALL_CVS_,CONST) \
+#define DHOOKS_POINTER_TO_CLASS_METHOD0(_CALL_CVS_,_CONST_) \
     template <typename Ret, typename C, typename ...Args>\
-    void* _Pointer_to_class_method(Ret (__##_CALL_CVS_ C::*fn)(Args ...) CONST)\
+    void* pointer_to_class_method(Ret (__##_CALL_CVS_ C::*fn)(Args ...) _CONST_)\
     {\
         return _Ptr_to_fn(fn);\
     }
@@ -48,7 +48,10 @@ void** _Ptr_to_vtable(C* instance)
     DHOOKS_POINTER_TO_CLASS_METHOD0(_CALL_CVS_, )\
     DHOOKS_POINTER_TO_CLASS_METHOD0(_CALL_CVS_,const)
 
-DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_POINTER_TO_CLASS_METHOD);
+export namespace dhooks
+{
+	DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_POINTER_TO_CLASS_METHOD);
+}
 
 template <typename Fn_as, typename Arg2, typename Arg1, typename ...Args>
 decltype(auto) _Call_fn_as_fastcall(Fn_as callable, Arg2 arg2, Arg1 arg1, Args&& ...args)
@@ -357,20 +360,8 @@ export namespace dhooks
 	{
 		//todo: drop it if context is safe
 		mutable std::mutex mtx;
-		std::atomic<bool> active = false;
-		std::weak_ptr<basic_context> wctx;
-
-		std::shared_ptr<basic_context> get_ctx( )const
-		{
-#ifdef _DEBUG
-			return std::shared_ptr(wctx);
-#else
-			return wctx.lock( );
-#endif
-		}
-
+		hook_entry_shared entry;
 		hook_holder_data_after_call after_call;
-
 		void* target = nullptr;
 		void* replace = nullptr;
 
@@ -512,7 +503,7 @@ export namespace dhooks
 		}\
 		void* get_replace_method( ) final\
 		{\
-			return _Pointer_to_class_method(&hook_holder::callback_proxy);\
+			return pointer_to_class_method(&hook_holder::callback_proxy);\
 		}\
 	};
 
@@ -557,7 +548,7 @@ DHOOKS_HOOK_HOLDER_TAIL
 			}\
 			void* get_replace_method( ) final\
 			{\
-				return _Pointer_to_class_method(&hook_holder::callback_proxy);\
+				return pointer_to_class_method(&hook_holder::callback_proxy);\
 			}\
 		};
 	DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_HOOK_HOLDER_IMPL);

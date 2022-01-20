@@ -109,14 +109,25 @@ template <typename T>
 static auto _Find_hook_itr(T& storage, void* target)
 {
 	runtime_assert(target != nullptr);
-	return std::ranges::find(storage, target, &hook_entry::target);
+	//return std::ranges::find(storage, target, &hook_entry::target*);
+	auto end = storage.end( );
+	for (auto itr = storage.begin( ); itr != end; ++itr)
+	{
+		auto& entry = *itr;
+		if (target == entry->target)
+			return itr;
+	}
+	return end;
 }
 
 template <typename T>
-static auto _Find_hook(T& storage, void* target)
+static hook_entry_shared _Find_hook(T& storage, void* target)
 {
 	auto itr = _Find_hook_itr(storage, target);
-	return itr == storage.end( ) ? nullptr : std::addressof(*itr);
+	if (itr == storage.end( ))
+		return nullptr;
+	else
+		return *itr;
 }
 
 template <typename T>
@@ -135,12 +146,17 @@ static hook_status _Set_hook_state(T& storage, void* target, bool enable)
 template <typename T>
 static hook_status _Set_hook_state_all(T& storage, bool enable, bool ignore_errors = false)
 {
-	//auto frozen = frozen_threads_storage(false);
+	constexpr auto transform_fn = [](const hook_entry_shared& h)->hook_entry&
+	{
+		return *h;
+	};
 
-	auto storage_active = storage | std::views::filter([](const hook_entry& h)
-													   {
-														   return h.target != nullptr;
-													   });
+	constexpr auto filter_fn = [](const hook_entry& h)
+	{
+		return h.target != nullptr;
+	};
+
+	auto storage_active = storage | std::views::transform(transform_fn) | std::views::filter(filter_fn);
 	const auto begin = storage_active.begin( );
 	const auto end = storage_active.end( );
 
@@ -187,7 +203,8 @@ static hook_status _Set_hook_state_all(T& storage, bool enable, bool ignore_erro
 			auto& value_child = *itr_child;
 			if (value_child.enabled == enable)
 				continue;
-			if (const auto temp_status = value_child.set_state(enable); temp_status != hook_status::OK)
+			const auto temp_status = value_child.set_state(enable);
+			if (temp_status != hook_status::OK)
 			{
 				runtime_assert("Unable to revert hook state!");
 				return temp_status;
@@ -200,6 +217,7 @@ static hook_status _Set_hook_state_all(T& storage, bool enable, bool ignore_erro
 }
 
 //--------
+
 
 hook_result context::create_hook(void* target, void* detour)
 {
@@ -222,53 +240,56 @@ hook_result context::create_hook(void* target, void* detour)
 	};
 	for (const auto& value : storage_)
 	{
-		if (check_ptr_helper(value.target) || check_ptr_helper(value.detour))
+		if (check_ptr_helper(value->target) || check_ptr_helper(value->detour))
 			return hook_status::ERROR_ALREADY_CREATED;
 	}
 
-	hook_entry new_hook = {};
+	auto new_hook = std::make_shared<hook_entry>( );
 
-	if (!new_hook.create(target, detour))
+	if (!new_hook->create(target, detour))
 		return hook_status::ERROR_UNSUPPORTED_FUNCTION;
-	if (!new_hook.fix_page_protection( ))
+	if (!new_hook->fix_page_protection( ))
 		return hook_status::ERROR_MEMORY_PROTECT;
 
 #if defined(_M_X64) || defined(__x86_64__)
-	new_hook.detour = ct.pRelay;
+	new_hook->detour = ct.pRelay;
 #endif
 	// Back up the target function.
 
-	if (new_hook.patch_above)
-		new_hook.init_backup(static_cast<LPBYTE>(target) - sizeof(JMP_REL), sizeof(JMP_REL) + sizeof(JMP_REL_SHORT));
+	if (new_hook->patch_above)
+		new_hook->init_backup(static_cast<LPBYTE>(target) - sizeof(JMP_REL), sizeof(JMP_REL) + sizeof(JMP_REL_SHORT));
 	else
-		new_hook.init_backup(target, sizeof(JMP_REL));
+		new_hook->init_backup(target, sizeof(JMP_REL));
 
-	hook_result ret = hook_status::OK;
-	ret.entry = std::addressof(storage_.emplace_back(std::move(new_hook)));
-
-	return ret;
+	storage_.push_back(new_hook);
+	return {hook_status::OK,std::move(new_hook)};
 }
 
 hook_status context::remove_hook(void* target, bool force)
 {
-	const auto entry = _Find_hook(storage_, target);
-	if (!entry)
+	const auto entry_itr = _Find_hook_itr(storage_, target);
+	if (entry_itr == storage_.end( ))
 		return hook_status::ERROR_NOT_CREATED;
+
+	auto& entry = *entry_itr;
 
 	if (entry->enabled)
 	{
-		if (const auto status = entry->set_state(false); status != hook_status::OK)
+		const auto status = entry->set_state(false);
+		if (status != hook_status::OK)
 		{
 			if (!force || status != hook_status::ERROR_MEMORY_PROTECT)
 				return status;
 		}
+		//normally set_state sets it
+		//force it to prevent assert in destructor
 		entry->enabled = false;
 	}
 
-	storage_.erase(_Find_hook_itr(storage_, target));
+	storage_.erase(entry_itr);
 	return hook_status::OK;
 }
-
+#if 0
 hook_status context::enable_hook(void* target)
 {
 	return _Set_hook_state(storage_, target, true);
@@ -278,16 +299,14 @@ hook_status context::disable_hook(void* target)
 {
 	return _Set_hook_state(storage_, target, false);
 }
-
+#endif
 hook_result context::find_hook(void* target) const
 {
-	const auto entry = _Find_hook(storage_, target);
+	auto entry = _Find_hook(storage_, target);
 	if (!entry)
 		return hook_status::ERROR_NOT_CREATED;
 
-	hook_result result(hook_status::OK);
-	result.entry = const_cast<hook_entry*>(entry);
-	return result;
+	return {hook_status::OK,std::move(entry)};
 }
 #if 0
 auto minhook::create_hook_win_api(LPCWSTR pszModule, LPCSTR pszProcName, void* pDetour) -> hook_result
@@ -339,6 +358,7 @@ hook_status context_safe::remove_hook(void* target, bool force)
 	LOCK_AND_WORK(remove_hook, target, force);
 }
 
+#if 0
 hook_status context_safe::enable_hook(void* target)
 {
 	LOCK_AND_WORK(enable_hook, target);
@@ -348,6 +368,7 @@ hook_status context_safe::disable_hook(void* target)
 {
 	LOCK_AND_WORK(disable_hook, target);
 }
+#endif
 
 hook_result context_safe::find_hook(void* target) const
 {

@@ -11,18 +11,22 @@ export import :entry;
 
 export namespace dhooks
 {
+	using hook_entry_shared = std::shared_ptr<hook_entry>;
+
 	struct hook_result
 	{
 		template <std::convertible_to<hook_status> T>
-		hook_result(T status)
-			: status(status)
+		hook_result(T status, hook_entry_shared&& entry = {})
+			: status(status), entry(std::move(entry))
 		{
 			//runtime_assert(this->status == hook_status::OK);
 		}
 
 		hook_status status;
-		hook_entry* entry = nullptr;
+		hook_entry_shared entry;
 	};
+
+	//in future context must be completly removed
 
 	class __declspec(novtable) basic_context
 	{
@@ -31,8 +35,10 @@ export namespace dhooks
 
 		virtual hook_result create_hook(void* target, void* detour) = 0;
 		virtual hook_status remove_hook(void* target, bool force = false) = 0;
+#if 0
 		virtual hook_status enable_hook(void* target) = 0;
 		virtual hook_status disable_hook(void* target) = 0;
+#endif
 		virtual hook_result find_hook(void* target) const = 0;
 		virtual void remove_all_hooks( ) = 0;
 		virtual hook_status enable_all_hooks( ) = 0;
@@ -42,14 +48,16 @@ export namespace dhooks
 	class context final : public basic_context
 	{
 	public:
-		using value_type = std::vector<hook_entry>;
+		using value_type = std::vector<hook_entry_shared>;
 
 		context( ) = default;
 
 		hook_result create_hook(void* target, void* detour) override;
 		hook_status remove_hook(void* target, bool force) override;
+#if 0
 		hook_status enable_hook(void* target) override;
 		hook_status disable_hook(void* target) override;
+#endif
 		hook_result find_hook(void* target) const override;
 		void remove_all_hooks( ) override;
 		hook_status enable_all_hooks( ) override;
@@ -67,8 +75,10 @@ export namespace dhooks
 
 		hook_result create_hook(void* target, void* detour) override;
 		hook_status remove_hook(void* target, bool force) override;
+#if 0
 		hook_status enable_hook(void* target) override;
 		hook_status disable_hook(void* target) override;
+#endif
 		hook_result find_hook(void* target) const override;
 		void remove_all_hooks( ) override;
 		hook_status enable_all_hooks( ) override;
@@ -99,4 +109,4 @@ export namespace dhooks
 	[[deprecated("use CreateHook directly. result are same")]]
 	auto create_hook_win_api(LPCWSTR pszModule, LPCSTR pszProcName, void* pDetour)->hook_result;
 #endif
-}
+	}

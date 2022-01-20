@@ -23,4 +23,5 @@ export namespace dhooks
 	private:
 		std::vector<uint8_t> backup_;
 	};
+
 }
