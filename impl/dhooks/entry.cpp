@@ -16,7 +16,7 @@ hook_entry::hook_entry( ) = default;
 
 hook_entry::~hook_entry( )
 {
-	runtime_assert(enabled == false, "Unable to destroy enabled hook entry!");
+	this->disable();
 }
 
 hook_entry::hook_entry(hook_entry && other) noexcept
@@ -31,6 +31,58 @@ hook_entry& hook_entry::operator=(hook_entry && other) noexcept
 	other.enabled = false;
 	backup_ = std::move(other.backup_);
 	return *this;
+}
+
+bool hook_entry::create(void* target, void* detour)
+{
+	if (!nstd::mem::block(target).executable( ) || !nstd::mem::block(detour).executable( ))
+		return /*hook_status::ERROR_NOT_EXECUTABLE*/0;
+
+	if (target == detour)
+		return /*hook_status::ERROR_UNSUPPORTED_FUNCTION*/0;
+
+#if 0
+	const auto check_ptr_helper = [&](void* checked)
+	{
+		return checked == target || checked == detour;
+	};
+	for (const auto& value : storage_)
+	{
+		if (check_ptr_helper(value->target) || check_ptr_helper(value->detour))
+			return /*hook_status::ERROR_ALREADY_CREATED*/0;
+	}
+#endif
+
+	if (!trampoline2::create(target, detour))
+		return /*hook_status::ERROR_UNSUPPORTED_FUNCTION*/0;
+	if (!this->fix_page_protection( ))
+		return /*hook_status::ERROR_MEMORY_PROTECT*/0;
+
+#if defined(_M_X64) || defined(__x86_64__)
+	this->detour = ct.pRelay;
+#endif
+	// Back up the target function.
+
+	if (this->patch_above)
+		this->init_backup(static_cast<LPBYTE>(target) - sizeof(JMP_REL), sizeof(JMP_REL) + sizeof(JMP_REL_SHORT));
+	else
+		this->init_backup(target, sizeof(JMP_REL));
+
+	return 1;
+	//storage_.push_back(new_hook);
+	//return {hook_status::OK,std::move(new_hook)};
+}
+
+bool hook_entry::enable( )
+{
+	const auto status = this->set_state(true);
+	return status == hook_status::OK;
+}
+
+bool hook_entry::disable()
+{
+	const auto status = this->set_state(false);
+	return status == hook_status::OK;
 }
 
 hook_status hook_entry::set_state(bool enable)
@@ -82,11 +134,7 @@ hook_status hook_entry::set_state(bool enable)
 	}
 	else
 	{
-		const auto backup = backup_.data( );
-		if (patch_above)
-			std::memcpy(patch_target, backup, sizeof(JMP_REL) + sizeof(JMP_REL_SHORT));
-		else
-			std::memcpy(patch_target, backup, sizeof(JMP_REL));
+		std::memcpy(patch_target, backup_.data( ), backup_.size( ));
 	}
 
 	VirtualProtect(patch_target, patch_size, old_protect, &old_protect);

@@ -7,40 +7,24 @@ module;
 module dhooks;
 
 using namespace dhooks;
-
-hook_holder_data::hook_holder_data( ) = default;
-
-hook_holder_data::~hook_holder_data( )
-{
-	this->unhook( );
-}
-
-//hook_holder_data::hook_holder_data(hook_holder_data&&) noexcept = default;
-//hook_holder_data& hook_holder_data::operator=(hook_holder_data&&) noexcept = default;
-
 bool hook_holder_data::hook( )
 {
 	const auto lock = std::scoped_lock(mtx);
 	runtime_assert(!this->hooked( ), "Hook already set!");
-	const auto ctx = current_context::share( );
-	runtime_assert(ctx != nullptr, "Context isn't set!");
 	runtime_assert(!target);
 	target = this->get_target_method( );
 	runtime_assert(!replace);
 	replace = this->get_replace_method( );
 
-	auto result = ctx->create_hook(target, replace);
-	if (result.status != hook_status::OK)
+	auto result = entry.create(target, replace);
+	if (/*result.status != hook_status::OK*/!result)
 	{
-		runtime_assert(std::string("Unable to hook function: ").append(hook_status_to_string(result.status)).c_str( ));
+		runtime_assert("Unable to hook function!");
 		return false;
 	}
 
-	const auto original = result.entry->trampoline.data( );
-	if (!original)
-		return false;
+	const auto original = entry.trampoline.data( );
 	this->set_original_func(original);
-	entry = std::move(result.entry);
 	return true;
 }
 
@@ -50,21 +34,11 @@ bool hook_holder_data::unhook( )
 		return false;
 
 	const auto lock = std::scoped_lock(mtx);
-	const auto ctx = current_context::share( );
 
-	bool result;
-
-	//remove from context
-	if (ctx && ctx->find_hook(target).entry == entry)
-		result = ctx->remove_hook(target, true) == hook_status::OK;
-	else
-		result = entry->set_state(false) == hook_status::OK;
-
-	entry.reset( );
 	after_call.reset( );
 	replace = target = nullptr;
 
-	return result;
+	return entry.disable( );
 }
 
 void hook_holder_data::unhook_after_call( )
@@ -79,26 +53,18 @@ bool hook_holder_data::enable( )
 		return false;
 
 	const auto lock = std::scoped_lock(mtx);
-	return entry->set_state(true) == hook_status::OK;
+	return entry.enable( );
 }
 
 bool hook_holder_data::disable( )
 {
-	bool result;
 	if (!this->hooked( ))
-	{
-		result = false;
-	}
-	else
-	{
-		const auto lock = std::scoped_lock(mtx);
-		result = entry->set_state(false) == hook_status::OK;
-	}
+		return 0;
 
 	after_call.disable = false;
-	return result;
+	return entry.disable( );
 }
- 
+
 void hook_holder_data::disable_after_call( )
 {
 	//runtime_assert(this->hooked( ));
@@ -107,12 +73,12 @@ void hook_holder_data::disable_after_call( )
 
 bool hook_holder_data::hooked( ) const
 {
-	return entry != nullptr;
+	return replace && target;
 }
 
 bool hook_holder_data::enabled( ) const
 {
-	return this->hooked( ) && entry->enabled;
+	return this->hooked( ) && entry.enabled;
 }
 
 bool hook_holder_data::unhook_after_call_if_wanted( )

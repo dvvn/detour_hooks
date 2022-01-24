@@ -83,7 +83,7 @@ export namespace dhooks
 		trampoline2& operator=(trampoline2&&) noexcept;
 
 		bool fix_page_protection( );
-		bool create(void* target, void* detour);
+		virtual bool create(void* target, void* detour);
 
 		void* target = nullptr;
 		void* detour = nullptr; // [In] Address of the detour function.

@@ -6,7 +6,8 @@ module;
 #include <mutex>
 
 export module dhooks;
-export import :context;
+//export import :context;
+export import :entry;
 
 #define DHOOKS_CALL_CVS_HELPER_STATIC(_MACRO_)\
 		_MACRO_(cdecl)\
@@ -358,20 +359,16 @@ export namespace dhooks
 
 	class __declspec(novtable) hook_holder_data : protected virtual original_func_setter
 	{
-		//todo: drop it if context is safe
 		mutable std::mutex mtx;
-		hook_entry_shared entry;
+		hook_entry entry;
 		hook_holder_data_after_call after_call;
 		void* target = nullptr;
 		void* replace = nullptr;
 
 	protected:
-		hook_holder_data( );
-		~hook_holder_data( ) override;
+		hook_holder_data( ) = default;
 
 	public:
-		/*hook_holder_data(hook_holder_data&&) noexcept;
-		hook_holder_data& operator=(hook_holder_data&&) noexcept;*/
 
 		bool hook( );
 		bool unhook( );

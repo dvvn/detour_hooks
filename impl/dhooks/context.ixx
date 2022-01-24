@@ -88,7 +88,7 @@ export namespace dhooks
 		std::unique_ptr<basic_context> ctx_;
 		mutable std::recursive_mutex mtx_;
 	};
-
+		
 	using current_context_base = nstd::one_instance<std::shared_ptr<basic_context>>;
 	struct current_context
 	{
@@ -109,4 +109,4 @@ export namespace dhooks
 	[[deprecated("use CreateHook directly. result are same")]]
 	auto create_hook_win_api(LPCWSTR pszModule, LPCSTR pszProcName, void* pDetour)->hook_result;
 #endif
-	}
+}

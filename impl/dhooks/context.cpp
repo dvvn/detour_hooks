@@ -219,6 +219,7 @@ static hook_status _Set_hook_state_all(T& storage, bool enable, bool ignore_erro
 //--------
 
 
+//moved
 hook_result context::create_hook(void* target, void* detour)
 {
 	if (!nstd::mem::block(target).executable( ) || !nstd::mem::block(detour).executable( ))
@@ -265,6 +266,7 @@ hook_result context::create_hook(void* target, void* detour)
 	return {hook_status::OK,std::move(new_hook)};
 }
 
+//moved
 hook_status context::remove_hook(void* target, bool force)
 {
 	const auto entry_itr = _Find_hook_itr(storage_, target);
