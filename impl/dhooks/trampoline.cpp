@@ -94,9 +94,9 @@ bool trampoline2::create(void* target, void* detour)
 
 	using namespace hde;
 	using namespace nstd::mem;
-	 
+
 	do
-	{ 
+	{
 		HDE_data hs;
 		uint8_t copy_size = 0;
 		ULONG_PTR new_inst;
@@ -286,16 +286,16 @@ bool trampoline2::create(void* target, void* detour)
 
 
 	// Is there enough place for a long jump?
-	if (old_pos < sizeof(JMP_REL) && !block(address(target) + old_pos, sizeof(JMP_REL) - old_pos).code_padding( ))
+	if (old_pos < sizeof(JMP_REL) && !block((uint8_t*)target + old_pos, sizeof(JMP_REL) - old_pos).code_padding( ))
 	{
 		// Is there enough place for a short jump?
-		if (old_pos < sizeof(JMP_REL_SHORT) && !block(address(target) + old_pos, sizeof(JMP_REL_SHORT) - old_pos).code_padding( ))
+		if (old_pos < sizeof(JMP_REL_SHORT) && !block((uint8_t*)target + old_pos, sizeof(JMP_REL_SHORT) - old_pos).code_padding( ))
 			return false;
 
 		// Can we place the long jump above the function?
-		if (!block(address(target) - sizeof(JMP_REL)).executable( ))
+		if (!block((uint8_t*)target - sizeof(JMP_REL), sizeof(JMP_REL)).executable( ))
 			return false;
-		if (!block(address(target) - sizeof(JMP_REL), sizeof(JMP_REL)).code_padding( ))
+		if (!block((uint8_t*)target - sizeof(JMP_REL), sizeof(JMP_REL)).code_padding( ))
 			return false;
 
 		patch_above = true;

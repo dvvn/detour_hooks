@@ -16,7 +16,7 @@ hook_entry::hook_entry( ) = default;
 
 hook_entry::~hook_entry( )
 {
-	this->disable();
+	this->disable( );
 }
 
 hook_entry::hook_entry(hook_entry && other) noexcept
@@ -35,7 +35,7 @@ hook_entry& hook_entry::operator=(hook_entry && other) noexcept
 
 bool hook_entry::create(void* target, void* detour)
 {
-	if (!nstd::mem::block(target).executable( ) || !nstd::mem::block(detour).executable( ))
+	if (!nstd::mem::block((uint8_t*)target, sizeof(size_t) * 2).executable( ) || !nstd::mem::block((uint8_t*)detour, sizeof(size_t) * 2).executable( ))
 		return /*hook_status::ERROR_NOT_EXECUTABLE*/0;
 
 	if (target == detour)
@@ -79,7 +79,7 @@ bool hook_entry::enable( )
 	return status == hook_status::OK;
 }
 
-bool hook_entry::disable()
+bool hook_entry::disable( )
 {
 	const auto status = this->set_state(false);
 	return status == hook_status::OK;
@@ -150,6 +150,6 @@ hook_status hook_entry::set_state(bool enable)
 void hook_entry::init_backup(void* from, size_t bytes_count)
 {
 	runtime_assert(backup_.empty( ));
-	auto rng = nstd::mem::block(from, bytes_count);
-	backup_.assign(rng.begin( ), rng.end( ));
+	auto begin = (uint8_t*)from;
+	backup_.assign(begin, begin + bytes_count);
 }
