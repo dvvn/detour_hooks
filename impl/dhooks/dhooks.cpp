@@ -7,6 +7,50 @@ module;
 module dhooks;
 
 using namespace dhooks;
+
+hook_holder_data_after_call::hook_holder_data_after_call( )
+{
+	reset( );
+}
+
+hook_holder_data_after_call::hook_holder_data_after_call(const hook_holder_data_after_call& other)
+{
+	*this = std::move(other);
+}
+
+hook_holder_data_after_call& hook_holder_data_after_call::operator=(const hook_holder_data_after_call& other)
+{
+	unhook = static_cast<bool>(other.unhook);
+	disable = static_cast<bool>(other.disable);
+	return *this;
+}
+
+void hook_holder_data_after_call::reset( )
+{
+	unhook = disable = false;
+}
+
+//---
+
+hook_holder_data::hook_holder_data( ) = default;
+
+//---
+
+hook_holder_data::hook_holder_data(hook_holder_data && other)noexcept
+{
+	*this = std::move(other);
+}
+
+hook_holder_data& hook_holder_data::operator=(hook_holder_data && other)noexcept
+{
+	using std::swap;
+	swap(entry, other.entry);
+	swap(after_call, other.after_call);
+	swap(target, other.target);
+	swap(replace, other.replace);
+	return *this;
+}
+
 bool hook_holder_data::hook( )
 {
 	const auto lock = std::scoped_lock(mtx);

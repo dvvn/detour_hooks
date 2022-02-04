@@ -150,9 +150,6 @@ export namespace dhooks
 		}
 	};
 
-	template <typename Ret, call_conversion CallCvs, typename ...Args2>
-	class original_function0;
-
 	template <typename C>
 	class object_instance_holder
 	{
@@ -330,15 +327,11 @@ export namespace dhooks
 		std::atomic<bool> unhook;
 		std::atomic<bool> disable;
 
-		hook_holder_data_after_call( )
-		{
-			reset( );
-		}
+		hook_holder_data_after_call( );
+		hook_holder_data_after_call(const hook_holder_data_after_call& other);
+		hook_holder_data_after_call& operator=(const hook_holder_data_after_call& other);
 
-		void reset( )
-		{
-			unhook = disable = false;
-		}
+		void reset( );
 	};
 
 	class __declspec(novtable) hook_holder_data : protected virtual original_func_setter
@@ -350,9 +343,12 @@ export namespace dhooks
 		void* replace = nullptr;
 
 	protected:
-		hook_holder_data( ) = default;
+		hook_holder_data( );
 
 	public:
+
+		hook_holder_data(hook_holder_data&& other)noexcept;
+		hook_holder_data& operator=(hook_holder_data&& other)noexcept;
 
 		bool hook( );
 		bool unhook( );
@@ -435,28 +431,28 @@ export namespace dhooks
 	struct hook_holder;
 }
 
-#define DHOOKS_SET_RETURN_ADDRESS0(_THIS_,_ADDR_,_FN_) \
+#define DHOOKS_SET_RETURN_ADDRESS_IMPL(_THIS_,_ADDR_,_FN_) \
 	if(_THIS_->_Rt_addr_getter()->_ADDR_.has_value())\
 		_THIS_->_Rt_addr_getter()->_ADDR_.emplace(_FN_);
 
 #define DHOOKS_SET_RETURN_ADDRESS(_THIS_) \
-	DHOOKS_SET_RETURN_ADDRESS0(_THIS_,addr1,_ReturnAddress())\
-	DHOOKS_SET_RETURN_ADDRESS0(_THIS_,addr2,_AddressOfReturnAddress())
-
-template <typename T, size_t ...I>
-auto shift_left_impl(T& tpl, std::index_sequence<I...>)
-{
-	return std::forward_as_tuple(reinterpret_cast<std::tuple_element_t<I + 1, T>&>(std::get<I>(tpl)).unhide( )...);
-}
-
-template <typename ...T>
-auto shift_left(std::tuple<dhooks::hiddent_type<T>...>&& tpl)
-{
-	return shift_left_impl(tpl, std::make_index_sequence<sizeof...(T) - 1>( ));
-}
+	DHOOKS_SET_RETURN_ADDRESS_IMPL(_THIS_,addr1,_ReturnAddress())\
+	DHOOKS_SET_RETURN_ADDRESS_IMPL(_THIS_,addr2,_AddressOfReturnAddress())
 
 namespace dhooks
 {
+	template <typename T, size_t ...I>
+	auto shift_left_impl(T& tpl, std::index_sequence<I...>)
+	{
+		return std::forward_as_tuple(reinterpret_cast<std::tuple_element_t<I + 1, T>&>(std::get<I>(tpl)).unhide( )...);
+	}
+
+	template <typename ...T>
+	auto shift_left(std::tuple<dhooks::hiddent_type<T>...>&& tpl)
+	{
+		return shift_left_impl(tpl, std::make_index_sequence<sizeof...(T) - 1>( ));
+	}
+
 	export template<typename T>
 		requires(std::is_member_function_pointer_v<T>)
 	void* pointer_to_class_method(T fn)
@@ -473,7 +469,8 @@ namespace dhooks
 			instance->set_object_instance(thisptr);
 			return std::invoke(
 				callback,
-				instance, args.unhide( )...);
+				instance, args.unhide( )...
+			);
 		}
 		else
 		{
@@ -503,29 +500,24 @@ namespace dhooks
 
 	DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_HOOK_HOLDER_IMPL);
 
-#define CHEAT_HOOK_HOLDER_DETECTOR_MEMBER(_CALL_CVS_)\
-	export template <typename Ret, typename C, typename ...Args>\
-    auto _Detect_hook_holder(Ret (__##_CALL_CVS_ C::*fn)(Args ...)) ->\
-    hook_holder<Ret, call_conversion::_CALL_CVS_##__, C, /*false,*/ Args...>\
-    { return {}; }\
-    export template <typename Ret, typename C, typename ...Args>\
-    auto _Detect_hook_holder(Ret (__##_CALL_CVS_ C::*fn)(Args ...) const) ->\
-    hook_holder<Ret, call_conversion::_CALL_CVS_##__, C, /*true,*/ Args...>\
-    { return {}; }
+#define DHOOKS_HOOK_HOLDER_MEMBER_IMPL(_CALL_CVS_,_CONST_)\
+	template <typename Ret, typename C, typename ...Args>\
+	hook_holder<Ret, call_conversion::_CALL_CVS_##__, C, Args...>\
+	select_hook_holder_impl(Ret (__##_CALL_CVS_ C::*fn)(Args ...) _CONST_) { return {}; }
 
-#define CHEAT_HOOK_HOLDER_DETECTOR_STATIC(_CALL_CVS_)\
-	export template <typename Ret, typename ...Args>\
-    auto _Detect_hook_holder(Ret (__##_CALL_CVS_    *fn)(Args ...)) ->\
-	hook_holder<Ret, call_conversion::_CALL_CVS_##__, void,/* false,*/ Args...>\
-    { return {}; }
+#define DHOOKS_HOOK_HOLDER_MEMBER(_CALL_CVS_)\
+	DHOOKS_HOOK_HOLDER_MEMBER_IMPL(_CALL_CVS_,)\
+	DHOOKS_HOOK_HOLDER_MEMBER_IMPL(_CALL_CVS_,const)
 
-	DHOOKS_CALL_CVS_HELPER_ALL(CHEAT_HOOK_HOLDER_DETECTOR_MEMBER);
-	DHOOKS_CALL_CVS_HELPER_STATIC(CHEAT_HOOK_HOLDER_DETECTOR_STATIC);
+	DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_HOOK_HOLDER_MEMBER);
 
-#if 0
-	template <size_t Idx, typename Fn>
-	using _Detect_hook_holder_t = decltype(_Detect_hook_holder(std::declval<Fn>( )));
-#endif
+#define DHOOKS_HOOK_HOLDER_STATIC(_CALL_CVS_)\
+	template <typename Ret, typename ...Args>\
+	hook_holder<Ret, call_conversion::_CALL_CVS_##__, void, Args...>\
+	select_hook_holder_impl(Ret (__##_CALL_CVS_ *fn)(Args ...)) { return {}; }
+
+	DHOOKS_CALL_CVS_HELPER_STATIC(DHOOKS_HOOK_HOLDER_STATIC);
+
 	export template<typename Fn>
-		using select_hook_holder = decltype(_Detect_hook_holder(std::declval<Fn>( )));
+		using select_hook_holder = decltype(select_hook_holder_impl(std::declval<Fn>( )));
 }
