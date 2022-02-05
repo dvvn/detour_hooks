@@ -16,13 +16,12 @@ export namespace dhooks
 		hook_entry(hook_entry&& other) noexcept;
 		hook_entry& operator=(hook_entry&& other) noexcept;
 
-		bool create(void* target, void* detour) override;
+		bool create( ) override;
 
 		bool enable( );
 		bool disable( );
 
 		hook_status set_state(bool enable);
-		using trampoline2::fix_page_protection;
 		void init_backup(void* from, size_t bytes_count);
 
 		bool enabled = false;

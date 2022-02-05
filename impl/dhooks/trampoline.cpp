@@ -27,15 +27,14 @@ trampoline2& trampoline2::operator=(trampoline2&&) noexcept = default;
 bool trampoline2::fix_page_protection( )
 {
 	runtime_assert(!old_protection_.has_value( ));
+	runtime_assert(this->created( ));
 
-	const auto buff = trampoline.data( );
-	const auto buff_size = trampoline.size( );
-
-	if (!nstd::mem::block(buff, buff_size).executable( ))
+	nstd::mem::block block = {trampoline_.data( ), trampoline_.size( )};
+	if (!block.executable( ))
 	{
 		try
 		{
-			old_protection_ = {buff, buff_size, PAGE_EXECUTE_READWRITE};
+			old_protection_ = {block, PAGE_EXECUTE_READWRITE};
 		}
 		catch (const std::exception&)
 		{
@@ -46,10 +45,20 @@ bool trampoline2::fix_page_protection( )
 	return true;
 }
 
-bool trampoline2::create(void* target, void* detour)
+bool trampoline2::create( )
 {
-	this->target = target;
-	this->detour = detour;
+	if (target == detour)
+		return /*hook_status::ERROR_UNSUPPORTED_FUNCTION*/0;
+	if (!target)
+		return 0;
+	if (!detour)
+		return 0;
+	if (!nstd::mem::block(target, sizeof(size_t) + 1).executable( ))
+		return /*hook_status::ERROR_NOT_EXECUTABLE*/0;
+	if (!nstd::mem::block(detour, sizeof(size_t) + 1).executable( ))
+		return /*hook_status::ERROR_NOT_EXECUTABLE*/0;
+	if (this->created( ))
+		return 0;
 
 #if defined(_M_X64) || defined(__x86_64__)
 	CALL_ABS call = {
@@ -88,6 +97,7 @@ bool trampoline2::create(void* target, void* detour)
 #if defined(_M_X64) || defined(__x86_64__)
 	uint8_t instBuf[16];
 #endif
+	trampoline_type trampoline;
 
 	//ct.patch_above = false;
 	//ct.ips_count   = 0;
@@ -154,7 +164,6 @@ bool trampoline2::create(void* target, void* detour)
 			// Modify the RIP relative address.
 			uint32_t* pRelAddr;
 
-			// Avoid using memcpy to reduce the footprint.
 			std::memcpy(instBuf, (LPBYTE)old_inst, copy_size);
 
 			copy_src = instBuf;
@@ -284,7 +293,6 @@ bool trampoline2::create(void* target, void* detour)
 	}
 	while (!finished);
 
-
 	// Is there enough place for a long jump?
 	if (old_pos < sizeof(JMP_REL) && !block((uint8_t*)target + old_pos, sizeof(JMP_REL) - old_pos).code_padding( ))
 	{
@@ -305,10 +313,23 @@ bool trampoline2::create(void* target, void* detour)
 	// Create a relay function.
 	jmp.address = reinterpret_cast<ULONG_PTR>(ct.pDetour);
 
-	ct.pRelay = static_cast<LPBYTE>(ct.pTrampoline.get( )) + new_pos;
+	ct.pRelay = static_cast<LPBYTE>(trampoline.data( )) + new_pos;
 
 	std::memcpy(ct.pRelay, &jmp, sizeof jmp);
 #endif
 
+	trampoline_ = std::move(trampoline);
 	return true;
+}
+
+bool trampoline2::created( )const
+{
+	return !trampoline_.empty( );
+}
+
+void* trampoline2::get_original_method( )const
+{
+	runtime_assert(created());
+	auto ptr = trampoline_.data( );
+	return (void*)ptr;
 }

@@ -76,6 +76,8 @@ export namespace dhooks
 
 	struct trampoline2
 	{
+		using trampoline_type = std::vector<uint8_t>;
+
 		trampoline2( );
 		virtual ~trampoline2( );
 
@@ -83,15 +85,15 @@ export namespace dhooks
 		trampoline2& operator=(trampoline2&&) noexcept;
 
 		bool fix_page_protection( );
-		virtual bool create(void* target, void* detour);
+		virtual bool create( );
+		bool created( )const;
+		void* get_original_method( )const;
 
 		void* target = nullptr;
 		void* detour = nullptr; // [In] Address of the detour function.
 #if defined(_M_X64) || defined(__x86_64__)
 		void* pRelay = nullptr; // [Out] Address of the relay function.
 #endif
-		std::vector<uint8_t> trampoline;
-
 		bool patch_above = false; // [Out] Should use the hot patch area?
 		//uint32_t_t ips_count   = 0;     // [Out] Number of the instruction boundaries.
 
@@ -99,6 +101,7 @@ export namespace dhooks
 		std::vector<uint8_t> old_ips_; // [Out] Instruction boundaries of the target function.
 		std::vector<uint8_t> new_ips_; // [Out] Instruction boundaries of the trampoline function.
 
+		trampoline_type trampoline_;
 		nstd::mem::protect old_protection_;
 	};
 }

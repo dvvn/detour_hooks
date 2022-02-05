@@ -33,13 +33,9 @@ hook_entry& hook_entry::operator=(hook_entry && other) noexcept
 	return *this;
 }
 
-bool hook_entry::create(void* target, void* detour)
+bool hook_entry::create()
 {
-	if (!nstd::mem::block((uint8_t*)target, sizeof(size_t) * 2).executable( ) || !nstd::mem::block((uint8_t*)detour, sizeof(size_t) * 2).executable( ))
-		return /*hook_status::ERROR_NOT_EXECUTABLE*/0;
-
-	if (target == detour)
-		return /*hook_status::ERROR_UNSUPPORTED_FUNCTION*/0;
+	
 
 #if 0
 	const auto check_ptr_helper = [&](void* checked)
@@ -53,7 +49,7 @@ bool hook_entry::create(void* target, void* detour)
 	}
 #endif
 
-	if (!trampoline2::create(target, detour))
+	if (!trampoline2::create())
 		return /*hook_status::ERROR_UNSUPPORTED_FUNCTION*/0;
 	if (!this->fix_page_protection( ))
 		return /*hook_status::ERROR_MEMORY_PROTECT*/0;

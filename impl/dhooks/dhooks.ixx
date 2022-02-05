@@ -109,7 +109,7 @@ export namespace dhooks
 	struct __declspec(novtable) original_func_setter
 	{
 		virtual ~original_func_setter( ) = default;
-		virtual void set_original_func(void* fn) = 0;
+		virtual void set_original_method(void* fn) = 0;
 	};
 
 	template <typename Ret, /*typename Arg1,*/ typename ...Args>
@@ -301,7 +301,7 @@ export namespace dhooks
 				return call_function(original_func, args...);
 		}
 
-		void set_original_func(void* fn) final
+		void set_original_method(void* fn) final
 		{
 			reinterpret_cast<void*&>(original_func) = fn;
 		}
@@ -322,25 +322,11 @@ export namespace dhooks
 		}
 	};
 
-	struct hook_holder_data_after_call
-	{
-		std::atomic<bool> unhook;
-		std::atomic<bool> disable;
-
-		hook_holder_data_after_call( );
-		hook_holder_data_after_call(const hook_holder_data_after_call& other);
-		hook_holder_data_after_call& operator=(const hook_holder_data_after_call& other);
-
-		void reset( );
-	};
-
 	class __declspec(novtable) hook_holder_data : protected virtual original_func_setter
 	{
 		mutable std::mutex mtx;
 		hook_entry entry;
-		hook_holder_data_after_call after_call;
-		void* target = nullptr;
-		void* replace = nullptr;
+		bool disable_after_call_ = false;
 
 	protected:
 		hook_holder_data( );
@@ -351,8 +337,6 @@ export namespace dhooks
 		hook_holder_data& operator=(hook_holder_data&& other)noexcept;
 
 		bool hook( );
-		bool unhook( );
-		void unhook_after_call( );
 
 		bool enable( );
 		bool disable( );
@@ -361,11 +345,11 @@ export namespace dhooks
 		bool hooked( ) const;
 		bool enabled( ) const;
 
-		virtual void* get_target_method( ) const = 0;
-		virtual void* get_replace_method( ) = 0;
 	protected:
-		bool unhook_after_call_if_wanted( );
-		bool disable_after_call_if_wanted( );
+		void set_target_method(void* fn);
+		void set_replace_method(void* fn);
+
+		bool try_disable_after_call( );
 	};
 
 	struct return_address_getter
@@ -381,8 +365,9 @@ export namespace dhooks
 
 	};
 
-	template <typename Ret, call_conversion CallCvs, typename Arg1, typename ...Args>
-	struct hook_holder_impl : return_address_getter
+	template <size_t UniqueIdx, typename Ret, call_conversion CallCvs, typename Arg1, typename ...Args>
+	struct hook_holder_impl :
+		return_address_getter
 		, original_function<Ret, CallCvs, Arg1, Args...>
 		, hook_holder_data
 		, hook_callback<Ret, Args...>
@@ -401,7 +386,7 @@ export namespace dhooks
 			auto& ref = instance( );
 #ifdef _DEBUG
 			if (ref != nullptr)
-				std::_Xout_of_range(__FUNCSIG__": instance already created!");
+				throw std::out_of_range(__FUNCSIG__": instance already created!");
 #endif
 			ref = this;
 		}
@@ -414,20 +399,18 @@ export namespace dhooks
 	protected:
 		Ret callback_impl(Args ...args)
 		{
-			//this->reset_return_value( ); //done by reset_return_value
 			this->callback(args...);
 
 			if (!this->have_return_value( ))
 				this->call_original_and_store_result(args...);
 
-			if (!this->unhook_after_call_if_wanted( ))
-				this->disable_after_call_if_wanted( );
+			this->try_disable_after_call( );
 
 			return std::move(*this).get_return_value( );
 		}
 	};
 
-	template <typename Ret, call_conversion CallCvs, typename Arg1, typename ...Args>
+	template <size_t UniqueIdx, typename Ret, call_conversion CallCvs, typename Arg1, typename ...Args>
 	struct hook_holder;
 }
 
@@ -461,8 +444,8 @@ namespace dhooks
 		return ptr;
 	}
 
-	template<typename T, typename Fn, typename Ret, call_conversion CallCvs, typename C, typename ...Args>
-	Ret callback_proxy_impl(T* thisptr, Fn callback, hook_holder_impl<Ret, CallCvs, C, Args...>* instance, hiddent_type<Args> ...args)
+	template<typename T, typename Fn, size_t UniqueIdx, typename Ret, call_conversion CallCvs, typename C, typename ...Args>
+	Ret callback_proxy_impl(T* thisptr, Fn callback, hook_holder_impl<UniqueIdx, Ret, CallCvs, C, Args...>* instance, hiddent_type<Args> ...args)
 	{
 		if constexpr (std::is_class_v<C>)
 		{
@@ -483,26 +466,27 @@ namespace dhooks
 	}
 
 #define DHOOKS_HOOK_HOLDER_IMPL(_CALL_CVS_)\
-	export template <typename Ret, typename Arg1, typename ...Args>\
-	struct hook_holder<Ret, call_conversion::_CALL_CVS_##__, Arg1, Args...>: hook_holder_impl<Ret, call_conversion::_CALL_CVS_##__, Arg1, Args...>\
+	export template <size_t UniqueIdx, typename Ret, typename Arg1, typename ...Args>\
+	struct hook_holder<UniqueIdx, Ret, call_conversion::_CALL_CVS_##__, Arg1, Args...>\
+	: hook_holder_impl<UniqueIdx, Ret, call_conversion::_CALL_CVS_##__, Arg1, Args...>\
 	{\
+		hook_holder()\
+		{\
+			this->set_replace_method(pointer_to_class_method(&hook_holder::callback_proxy));\
+		}\
 		Ret __##_CALL_CVS_ callback_proxy(hiddent_type<Args> ...args)\
 		{\
 			auto inst = this->instance( );\
 			DHOOKS_SET_RETURN_ADDRESS(inst);\
 			return callback_proxy_impl(this,&hook_holder::callback_impl,inst,args...);\
 		}\
-		void* get_replace_method( ) final\
-		{\
-			return pointer_to_class_method(&hook_holder::callback_proxy); \
-		}\
 	};
 
 	DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_HOOK_HOLDER_IMPL);
 
 #define DHOOKS_HOOK_HOLDER_MEMBER_IMPL(_CALL_CVS_,_CONST_)\
-	template <typename Ret, typename C, typename ...Args>\
-	hook_holder<Ret, call_conversion::_CALL_CVS_##__, C, Args...>\
+	template <size_t UniqueIdx, typename Ret, typename C, typename ...Args>\
+	hook_holder<UniqueIdx, Ret, call_conversion::_CALL_CVS_##__, C, Args...>\
 	select_hook_holder_impl(Ret (__##_CALL_CVS_ C::*fn)(Args ...) _CONST_) { return {}; }
 
 #define DHOOKS_HOOK_HOLDER_MEMBER(_CALL_CVS_)\
@@ -512,12 +496,12 @@ namespace dhooks
 	DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_HOOK_HOLDER_MEMBER);
 
 #define DHOOKS_HOOK_HOLDER_STATIC(_CALL_CVS_)\
-	template <typename Ret, typename ...Args>\
-	hook_holder<Ret, call_conversion::_CALL_CVS_##__, void, Args...>\
+	template <size_t UniqueIdx, typename Ret, typename ...Args>\
+	hook_holder<UniqueIdx, Ret, call_conversion::_CALL_CVS_##__, void, Args...>\
 	select_hook_holder_impl(Ret (__##_CALL_CVS_ *fn)(Args ...)) { return {}; }
 
 	DHOOKS_CALL_CVS_HELPER_STATIC(DHOOKS_HOOK_HOLDER_STATIC);
 
-	export template<typename Fn>
-		using select_hook_holder = decltype(select_hook_holder_impl(std::declval<Fn>( )));
+	export template<typename Fn, size_t UniqueIdx = 0>
+		using select_hook_holder = decltype(select_hook_holder_impl<UniqueIdx>(std::declval<Fn>( )));
 }
