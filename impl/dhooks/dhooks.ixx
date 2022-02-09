@@ -4,9 +4,9 @@ module;
 
 #include <memory>
 #include <mutex>
+#include <array>
 
 export module dhooks;
-//export import :context;
 export import :entry;
 
 #define DHOOKS_CALL_CVS_HELPER_STATIC(_MACRO_)\
@@ -24,6 +24,17 @@ export import :entry;
 
 namespace dhooks
 {
+	export enum class call_conversion
+	{
+		// ReSharper disable CppInconsistentNaming
+		thiscall__
+		, cdecl__
+		, stdcall__
+		, vectorcall__
+		, fastcall__
+		// ReSharper restore CppInconsistentNaming
+	};
+
 	template<typename Out, typename In>
 	Out force_cast(In in)
 	{
@@ -39,37 +50,6 @@ namespace dhooks
 		return std::invoke(out, std::forward<Args>(args)...);
 	}
 
-#define DHOOKS_CALL_MEMBER_FN_HEAD(_CALL_CVS_,_CONST_)\
-	export template<typename Ret, typename C, typename ...Args>\
-	Ret call_function(Ret(__##_CALL_CVS_ C::* fn)(Args ...) _CONST_, _CONST_ C* instance, Args ...args)
-
-#define DHOOKS_CALL_MEMBER_FN_BODY(_CALL_CVS_)\
-	force_cast_and_call<Ret(__##_CALL_CVS_*)(decltype(instance), Args...)>(fn, instance, std::forward<Args>(args)...);
-
-#define DHOOKS_CALL_MEMBER_FN_SIMPLE(_CALL_CVS_)\
-	DHOOKS_CALL_MEMBER_FN_HEAD(_CALL_CVS_,) { return DHOOKS_CALL_MEMBER_FN_BODY(_CALL_CVS_);}\
-	DHOOKS_CALL_MEMBER_FN_HEAD(_CALL_CVS_,const) { return DHOOKS_CALL_MEMBER_FN_BODY(_CALL_CVS_);}
-
-#define DHOOKS_CALL_MEMBER_FN_BODY_EX(_CALL_CVS_)\
-	force_cast_and_call<Ret(__##_CALL_CVS_*)(decltype(instance), void*, Args...)>(fn, instance, nullptr, std::forward<Args>(args)...);
-
-#define DHOOKS_CALL_MEMBER_FN_FASTCALL(_CALL_CVS_)\
-	DHOOKS_CALL_MEMBER_FN_HEAD(_CALL_CVS_,) { return DHOOKS_CALL_MEMBER_FN_BODY_EX(_CALL_CVS_);}\
-	DHOOKS_CALL_MEMBER_FN_HEAD(_CALL_CVS_,const) { return DHOOKS_CALL_MEMBER_FN_BODY_EX(_CALL_CVS_);}
-
-	DHOOKS_CALL_MEMBER_FN_SIMPLE(cdecl);
-	DHOOKS_CALL_MEMBER_FN_SIMPLE(stdcall);
-	DHOOKS_CALL_MEMBER_FN_SIMPLE(vectorcall);//not sure
-	DHOOKS_CALL_MEMBER_FN_FASTCALL(thiscall);
-	DHOOKS_CALL_MEMBER_FN_FASTCALL(fastcall);
-
-	export template<typename T, typename ...Args>
-		requires(!std::is_member_function_pointer_v<T>)
-	decltype(auto) call_function(T fn, Args&&...args)
-	{
-		return std::invoke(fn, std::forward<Args>(args)...);
-	}
-
 	struct visible_vtable
 	{
 		using table_type = void*;
@@ -81,31 +61,66 @@ namespace dhooks
 		}
 	};
 
-	export template<typename T, typename C, typename ...Args>
-		requires(std::is_member_function_pointer_v<T>)
-	decltype(auto) call_function(T fn, C* instance, size_t index, Args&&...args)
+	template<typename C>
+	auto get_func_from_vtable(C* instance, size_t index)
 	{
 		auto vtable = *reinterpret_cast<const visible_vtable*>(instance);
-		auto real_fn = vtable[index];
-		return call_function(force_cast<T>(real_fn), instance, std::forward<Args>(args)...);
+		return vtable[index];
 	}
 
+#define DHOOKS_CALL_MEMBER_FN_HEAD(_CALL_CVS_,_CONST_,...)\
+	export template<typename Ret, typename C, typename ...Args>\
+	Ret call_function(Ret(__##_CALL_CVS_ C::* fn)(Args ...) _CONST_, _CONST_ C* instance,##__VA_ARGS__, Args ...args)
+#define DHOOKS_CALL_FN_HEAD(_CALL_CVS_)\
+	export template<typename Ret, typename ...Args>\
+	Ret call_function(Ret(__##_CALL_CVS_ *fn)(Args ...), Args ...args)
 
+#define DHOOKS_CAST_MEMBER_FN(_CALL_CVS_)\
+	force_cast<Ret(__##_CALL_CVS_*)(decltype(instance), Args...)>(fn)
+#define DHOOKS_CALL_MEMBER_FN_BODY(_CALL_CVS_)\
+	force_cast_and_call<Ret(__##_CALL_CVS_*)(decltype(instance), Args...)>(fn, instance, std::forward<Args>(args)...);
+
+#define DHOOKS_CALL_MEMBER(_CALL_CVS_)\
+	DHOOKS_CALL_MEMBER_FN_HEAD(_CALL_CVS_, )\
+	{\
+		return DHOOKS_INVOKE_MEMBER_##_CALL_CVS_(fn);\
+	}\
+	DHOOKS_CALL_MEMBER_FN_HEAD(_CALL_CVS_, const)\
+	{\
+		return DHOOKS_INVOKE_MEMBER_##_CALL_CVS_(fn);\
+	}\
+	DHOOKS_CALL_MEMBER_FN_HEAD(_CALL_CVS_, , size_t index)\
+	{\
+		return DHOOKS_INVOKE_MEMBER_##_CALL_CVS_(get_func_from_vtable(instance,index));\
+	}\
+	DHOOKS_CALL_MEMBER_FN_HEAD(_CALL_CVS_, const, size_t index)\
+	{\
+		return DHOOKS_INVOKE_MEMBER_##_CALL_CVS_(get_func_from_vtable(instance,index));\
+	}
+
+#define DHOOKS_INVOKE_MEMBER_fastcall(_FN_)\
+	force_cast_and_call<Ret(__fastcall*)(decltype(instance),void*, Args...)>(_FN_, instance, nullptr, std::forward<Args>(args)...);
+#define DHOOKS_INVOKE_MEMBER_any(_CALL_CVS_,_FN_)\
+	force_cast_and_call<Ret(__##_CALL_CVS_*)(decltype(instance), Args...)>(_FN_, instance, std::forward<Args>(args)...);
+#define DHOOKS_INVOKE_MEMBER_thiscall(_FN_) DHOOKS_INVOKE_MEMBER_fastcall(_FN_)
+#define DHOOKS_INVOKE_MEMBER_stdcall(_FN_) DHOOKS_INVOKE_MEMBER_any(stdcall,_FN_)
+#define DHOOKS_INVOKE_MEMBER_cdecl(_FN_) DHOOKS_INVOKE_MEMBER_any(cdecl,_FN_)
+
+	DHOOKS_CALL_MEMBER(fastcall);
+	DHOOKS_CALL_MEMBER(thiscall);
+	DHOOKS_CALL_MEMBER(stdcall);
+	DHOOKS_CALL_MEMBER(cdecl);
+
+	export template<typename T, typename ...Args>
+		requires(!std::is_member_function_pointer_v<T>)
+	decltype(auto) call_function(T fn, Args&&...args)
+	{
+		return std::invoke(fn, std::forward<Args>(args)...);
+	}
 }
 
 export namespace dhooks
 {
-	enum class call_conversion
-	{
-		// ReSharper disable CppInconsistentNaming
-		thiscall__
-		, cdecl__
-		, stdcall__
-		, vectorcall__
-		, fastcall__
-		// ReSharper restore CppInconsistentNaming
-	};
-
 	struct __declspec(novtable) original_func_setter
 	{
 		virtual ~original_func_setter( ) = default;
@@ -289,10 +304,19 @@ export namespace dhooks
 	template <typename Ret, call_conversion CallCvs, typename C, typename ...Args>
 	class original_function :public object_instance_holder<C>, protected virtual original_func_setter, public return_value_holder<Ret>
 	{
-	protected:
-		using func_type = decltype(generate_function_type<Ret, CallCvs, C, Args...>( ));
-		func_type original_func = nullptr;
 	public:
+		using func_type = decltype(generate_function_type<Ret, CallCvs, C, Args...>( ));
+
+	protected:
+		func_type original_func = nullptr;
+
+	public:
+
+		func_type get_original( )const
+		{
+			return original_func;
+		}
+
 		Ret call_original(Args ...args)
 		{
 			if constexpr (std::is_class_v<C>)
@@ -322,10 +346,25 @@ export namespace dhooks
 		}
 	};
 
-	class __declspec(novtable) hook_holder_data : protected virtual original_func_setter
+	struct hook_enabler
 	{
-		mutable std::mutex mtx;
-		hook_entry entry;
+		virtual bool enable( ) = 0;
+	};
+
+	struct hook_disabler
+	{
+		virtual bool disable( ) = 0;
+	};
+
+	struct hook_disabler_lazy
+	{
+		virtual void request_disable( ) = 0;
+	};
+
+	class hook_holder_data : protected virtual original_func_setter, public hook_enabler, public hook_disabler, public hook_disabler_lazy
+	{
+		mutable std::mutex mtx_;
+		hook_entry entry_;
 		bool disable_after_call_ = false;
 
 	protected:
@@ -338,9 +377,9 @@ export namespace dhooks
 
 		bool hook( );
 
-		bool enable( );
-		bool disable( );
-		void disable_after_call( );
+		bool enable( ) final;
+		bool disable( ) final;
+		void request_disable( ) final;
 
 		bool hooked( ) const;
 		bool enabled( ) const;
@@ -349,7 +388,7 @@ export namespace dhooks
 		void set_target_method(void* fn);
 		void set_replace_method(void* fn);
 
-		bool try_disable_after_call( );
+		bool process_disable_request( );
 	};
 
 	struct return_address_getter
@@ -404,7 +443,7 @@ export namespace dhooks
 			if (!this->have_return_value( ))
 				this->call_original_and_store_result(args...);
 
-			this->try_disable_after_call( );
+			this->process_disable_request( );
 
 			return std::move(*this).get_return_value( );
 		}
@@ -505,3 +544,4 @@ namespace dhooks
 	export template<typename Fn, size_t UniqueIdx = 0>
 		using select_hook_holder = decltype(select_hook_holder_impl<UniqueIdx>(std::declval<Fn>( )));
 }
+

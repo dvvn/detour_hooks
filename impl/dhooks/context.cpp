@@ -1,3 +1,5 @@
+#if 0
+
 module;
 
 #include <nstd/runtime_assert.h>
@@ -247,7 +249,7 @@ hook_result context::create_hook(void* target, void* detour)
 
 	auto new_hook = std::make_shared<hook_entry>( );
 
-	if (!new_hook->create(target, detour))
+	if (!new_hook->create())
 		return hook_status::ERROR_UNSUPPORTED_FUNCTION;
 	if (!new_hook->fix_page_protection( ))
 		return hook_status::ERROR_MEMORY_PROTECT;
@@ -417,3 +419,4 @@ auto current_context::share( )->const element_type&
 {
 	return current_context_base::get( );
 }
+#endif

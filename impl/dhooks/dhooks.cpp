@@ -18,22 +18,22 @@ hook_holder_data::hook_holder_data(hook_holder_data && other)noexcept
 hook_holder_data& hook_holder_data::operator=(hook_holder_data && other)noexcept
 {
 	using std::swap;
-	swap(entry, other.entry);
+	swap(entry_, other.entry_);
 	swap(disable_after_call_, other.disable_after_call_);
 	return *this;
 }
 
 bool hook_holder_data::hook( )
 {
-	const auto lock = std::scoped_lock(mtx);
-	auto result = entry.create( );
+	const auto lock = std::scoped_lock(mtx_);
+	auto result = entry_.create( );
 	if (/*result.status != hook_status::OK*/!result)
 	{
 		runtime_assert("Unable to hook function!");
 		return false;
 	}
 
-	const auto original = entry.get_original_method( );
+	const auto original = entry_.get_original_method( );
 	this->set_original_method(original);
 	return true;
 }
@@ -43,8 +43,8 @@ bool hook_holder_data::enable( )
 	if (!this->hooked( ))
 		return false;
 
-	const auto lock = std::scoped_lock(mtx);
-	return entry.enable( );
+	const auto lock = std::scoped_lock(mtx_);
+	return entry_.enable( );
 }
 
 bool hook_holder_data::disable( )
@@ -52,12 +52,12 @@ bool hook_holder_data::disable( )
 	if (!this->hooked( ))
 		return false;
 
-	const auto lock = std::scoped_lock(mtx);
+	const auto lock = std::scoped_lock(mtx_);
 	disable_after_call_ = false;
-	return entry.disable( );
+	return entry_.disable( );
 }
 
-void hook_holder_data::disable_after_call( )
+void hook_holder_data::request_disable( )
 {
 	//runtime_assert(this->hooked( ));
 	disable_after_call_ = true;
@@ -65,27 +65,27 @@ void hook_holder_data::disable_after_call( )
 
 bool hook_holder_data::hooked( ) const
 {
-	return entry.created( );
+	return entry_.created( );
 }
 
 bool hook_holder_data::enabled( ) const
 {
-	return this->hooked( ) && entry.enabled;
+	return this->hooked( ) && entry_.enabled;
 }
 
 void hook_holder_data::set_target_method(void* fn)
 {
-	runtime_assert(!entry.target || !entry.enabled);
-	entry.target = fn;
+	runtime_assert(!entry_.target || !entry_.enabled);
+	entry_.target = fn;
 }
 
 void hook_holder_data::set_replace_method(void* fn)
 {
-	runtime_assert(!entry.detour || !entry.enabled);
-	entry.detour = fn;
+	runtime_assert(!entry_.detour || !entry_.enabled);
+	entry_.detour = fn;
 }
 
-bool hook_holder_data::try_disable_after_call( )
+bool hook_holder_data::process_disable_request( )
 {
 	return disable_after_call_ && this->disable( );
 }

@@ -1,3 +1,4 @@
+#if 0
 module;
 
 #include <nstd/one_instance.h>
@@ -110,3 +111,4 @@ export namespace dhooks
 	auto create_hook_win_api(LPCWSTR pszModule, LPCSTR pszProcName, void* pDetour)->hook_result;
 #endif
 }
+#endif
