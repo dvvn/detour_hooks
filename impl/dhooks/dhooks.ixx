@@ -5,11 +5,16 @@ module;
 #include <memory>
 #include <mutex>
 #include <array>
+#include <cassert>
 
 export module dhooks;
 export import :entry;
 
-#define DHOOKS_CALL_CVS_HELPER_STATIC(_MACRO_)\
+#ifndef assertm
+#define assertm(exp, msg) assert(((void)msg, exp))
+#endif
+
+#define DHOOKS_CALL_CVS_HELPER_GLOBAL(_MACRO_)\
 		_MACRO_(cdecl)\
 		_MACRO_(stdcall)\
 		_MACRO_(vectorcall)\
@@ -19,8 +24,11 @@ export import :entry;
 		_MACRO_(thiscall)
 
 #define DHOOKS_CALL_CVS_HELPER_ALL(_MACRO_)\
-		DHOOKS_CALL_CVS_HELPER_STATIC(_MACRO_)\
+		DHOOKS_CALL_CVS_HELPER_GLOBAL(_MACRO_)\
 		DHOOKS_CALL_CVS_HELPER_MEMBER(_MACRO_)
+
+//#define DHOOKS_INVOKE(_FN_,...) std::invoke(_FN_,__VA_ARGS__)
+#define DHOOKS_INVOKE(_FN_,...) _FN_(__VA_ARGS__)
 
 namespace dhooks
 {
@@ -43,12 +51,17 @@ namespace dhooks
 		return out;
 	}
 
-	template<typename Out, typename In, typename ...Args>
+	/*template<typename Out, typename In, typename ...Args>
 	decltype(auto) force_cast_and_call(In in, Args&&...args)
 	{
 		auto out = force_cast<Out>(in);
-		return std::invoke(out, std::forward<Args>(args)...);
-	}
+		return out(std::forward<Args>(args)...);
+	}*/
+
+#define DHOOKS_INVOKE_FORCE(_OUT_TYPE_, _FN_, ...)\
+	DHOOKS_INVOKE(force_cast<_OUT_TYPE_>(_FN_),__VA_ARGS__)
+#define DHOOKS_INVOKE_GLOBAL(_FN_)\
+	DHOOKS_INVOKE(_FN_, std::forward<Args>(args)...)
 
 	struct visible_vtable
 	{
@@ -75,10 +88,8 @@ namespace dhooks
 	export template<typename Ret, typename ...Args>\
 	Ret call_function(Ret(__##_CALL_CVS_ *fn)(Args ...), Args ...args)
 
-#define DHOOKS_CAST_MEMBER_FN(_CALL_CVS_)\
-	force_cast<Ret(__##_CALL_CVS_*)(decltype(instance), Args...)>(fn)
 #define DHOOKS_CALL_MEMBER_FN_BODY(_CALL_CVS_)\
-	force_cast_and_call<Ret(__##_CALL_CVS_*)(decltype(instance), Args...)>(fn, instance, std::forward<Args>(args)...);
+	DHOOKS_INVOKE_FORCE(Ret(__##_CALL_CVS_*)(decltype(instance), Args...), fn, instance, std::forward<Args>(args)...);
 
 #define DHOOKS_CALL_MEMBER(_CALL_CVS_)\
 	DHOOKS_CALL_MEMBER_FN_HEAD(_CALL_CVS_, )\
@@ -98,24 +109,22 @@ namespace dhooks
 		return DHOOKS_INVOKE_MEMBER_##_CALL_CVS_(get_func_from_vtable(instance,index));\
 	}
 
-#define DHOOKS_INVOKE_MEMBER_fastcall(_FN_)\
-	force_cast_and_call<Ret(__fastcall*)(decltype(instance),void*, Args...)>(_FN_, instance, nullptr, std::forward<Args>(args)...);
 #define DHOOKS_INVOKE_MEMBER_any(_CALL_CVS_,_FN_)\
-	force_cast_and_call<Ret(__##_CALL_CVS_*)(decltype(instance), Args...)>(_FN_, instance, std::forward<Args>(args)...);
-#define DHOOKS_INVOKE_MEMBER_thiscall(_FN_) DHOOKS_INVOKE_MEMBER_fastcall(_FN_)
+	DHOOKS_INVOKE_FORCE(Ret(__##_CALL_CVS_*)(decltype(instance), Args...), _FN_, instance, std::forward<Args>(args)...);
+#define DHOOKS_INVOKE_MEMBER_thiscall(_FN_)\
+	DHOOKS_INVOKE_FORCE(Ret(__fastcall*)(decltype(instance),void*, Args...), _FN_, instance, nullptr, std::forward<Args>(args)...);
+#define DHOOKS_INVOKE_MEMBER_fastcall(_FN_) DHOOKS_INVOKE_MEMBER_any(fastcall,_FN_)
 #define DHOOKS_INVOKE_MEMBER_stdcall(_FN_) DHOOKS_INVOKE_MEMBER_any(stdcall,_FN_)
 #define DHOOKS_INVOKE_MEMBER_cdecl(_FN_) DHOOKS_INVOKE_MEMBER_any(cdecl,_FN_)
+#define DHOOKS_INVOKE_MEMBER_vectorcall(_FN_) DHOOKS_INVOKE_MEMBER_any(vectorcall,_FN_)
 
-	DHOOKS_CALL_MEMBER(fastcall);
-	DHOOKS_CALL_MEMBER(thiscall);
-	DHOOKS_CALL_MEMBER(stdcall);
-	DHOOKS_CALL_MEMBER(cdecl);
+	DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_CALL_MEMBER);
 
 	export template<typename T, typename ...Args>
 		requires(!std::is_member_function_pointer_v<T>)
 	decltype(auto) call_function(T fn, Args&&...args)
 	{
-		return std::invoke(fn, std::forward<Args>(args)...);
+		return DHOOKS_INVOKE_GLOBAL(fn);
 	}
 }
 
@@ -127,7 +136,7 @@ export namespace dhooks
 		virtual void set_original_method(void* fn) = 0;
 	};
 
-	template <typename Ret, /*typename Arg1,*/ typename ...Args>
+	template <typename Ret, typename ...Args>
 	struct __declspec(novtable) hook_callback
 	{
 		virtual ~hook_callback( ) = default;
@@ -190,7 +199,7 @@ export namespace dhooks
 namespace dhooks
 {
 #define DHOOKS_GENERATE_FUNC(_CALL_CVS_)\
-	if constexpr(CallCvs == call_conversion::_CALL_CVS_##__)\
+	 constexpr(CallCvs == call_conversion::_CALL_CVS_##__)\
 	{\
 		if constexpr(std::is_class_v<C>)\
 		{\
@@ -207,15 +216,15 @@ namespace dhooks
 	template <typename Ret, call_conversion CallCvs, typename C, typename ...Args>
 	auto generate_function_type( )
 	{
-		DHOOKS_GENERATE_FUNC(cdecl)
-	else
-	DHOOKS_GENERATE_FUNC(stdcall)
-		else
-		DHOOKS_GENERATE_FUNC(vectorcall)
-		else
-		DHOOKS_GENERATE_FUNC(fastcall)
-		else
-		DHOOKS_GENERATE_FUNC(thiscall);
+		if DHOOKS_GENERATE_FUNC(cdecl)
+		else if	DHOOKS_GENERATE_FUNC(stdcall)
+		else if	DHOOKS_GENERATE_FUNC(vectorcall)
+		else if	DHOOKS_GENERATE_FUNC(fastcall)
+		else if constexpr (CallCvs == call_conversion::thiscall__)
+		{
+			Ret(__thiscall C:: * fn)(Args ...) = nullptr;
+			return fn;
+		}
 	}
 }
 
@@ -319,10 +328,25 @@ export namespace dhooks
 
 		Ret call_original(Args ...args)
 		{
-			if constexpr (std::is_class_v<C>)
-				return call_function<Ret, C, Args...>(original_func, this->get_object_instance( ), args...);//todo: made it works without template args specified
+			if constexpr (!std::is_class_v<C>)
+			{
+				return DHOOKS_INVOKE_GLOBAL(original_func);
+			}
 			else
-				return call_function(original_func, args...);
+			{
+#define DHOOKS_ORIGINAL_FN_CLASS_CALL(_CALL_CVS_)\
+				constexpr (CallCvs == call_conversion::_CALL_CVS_##__)\
+					{return DHOOKS_INVOKE_MEMBER_##_CALL_CVS_(original_func);}
+
+				auto instance = this->get_object_instance( );
+				assertm(instance != nullptr, "Object instance not set!");
+				if DHOOKS_ORIGINAL_FN_CLASS_CALL(cdecl)
+				else if DHOOKS_ORIGINAL_FN_CLASS_CALL(stdcall)
+				else if DHOOKS_ORIGINAL_FN_CLASS_CALL(vectorcall)
+				else if DHOOKS_ORIGINAL_FN_CLASS_CALL(fastcall)
+				else if DHOOKS_ORIGINAL_FN_CLASS_CALL(thiscall)
+#undef DHOOKS_ORIGINAL_FN_CLASS_CALL
+			}
 		}
 
 		void set_original_method(void* fn) final
@@ -334,13 +358,13 @@ export namespace dhooks
 		{
 			if constexpr (!std::is_void_v<Ret>)
 			{
-				auto ret = this->call_original(args...);
+				auto ret = this->call_original(std::forward<Args>(args)...);
 				this->store_return_value(ret);
 				return ret;
 			}
 			else
 			{
-				this->call_original(args...);
+				this->call_original(std::forward<Args>(args)...);
 				this->store_return_value( );
 			}
 		}
@@ -348,16 +372,19 @@ export namespace dhooks
 
 	struct hook_enabler
 	{
+		virtual ~hook_enabler( ) = default;
 		virtual bool enable( ) = 0;
 	};
 
 	struct hook_disabler
 	{
+		virtual ~hook_disabler( ) = default;
 		virtual bool disable( ) = 0;
 	};
 
 	struct hook_disabler_lazy
 	{
+		virtual ~hook_disabler_lazy( ) = default;
 		virtual void request_disable( ) = 0;
 	};
 
@@ -401,55 +428,14 @@ export namespace dhooks
 		{
 			return this;
 		}
-
 	};
 
-	template <size_t UniqueIdx, typename Ret, call_conversion CallCvs, typename Arg1, typename ...Args>
-	struct hook_holder_impl :
-		return_address_getter
-		, original_function<Ret, CallCvs, Arg1, Args...>
-		, hook_holder_data
-		, hook_callback<Ret, Args...>
-	{
-	protected:
-		static hook_holder_impl*& instance( )
-		{
-			static hook_holder_impl* obj = nullptr;
-			return obj;
-		}
+#define DHOOKS_HOOK_HOLDER_HEAD_TEMPLATE_ARGS\
+	size_t UniqueIdx, typename Ret
+#define DHOOKS_HOOK_HOLDER_HEAD_ARGS\
+	UniqueIdx, Ret
 
-	public:
-		hook_holder_impl( )
-			: hook_holder_data( )
-		{
-			auto& ref = instance( );
-#ifdef _DEBUG
-			if (ref != nullptr)
-				throw std::out_of_range(__FUNCSIG__": instance already created!");
-#endif
-			ref = this;
-		}
-
-		~hook_holder_impl( ) override
-		{
-			instance( ) = nullptr;
-		}
-
-	protected:
-		Ret callback_impl(Args ...args)
-		{
-			this->callback(args...);
-
-			if (!this->have_return_value( ))
-				this->call_original_and_store_result(args...);
-
-			this->process_disable_request( );
-
-			return std::move(*this).get_return_value( );
-		}
-	};
-
-	template <size_t UniqueIdx, typename Ret, call_conversion CallCvs, typename Arg1, typename ...Args>
+	template <DHOOKS_HOOK_HOLDER_HEAD_TEMPLATE_ARGS, call_conversion CallCvs, typename Arg1, typename ...Args>
 	struct hook_holder;
 }
 
@@ -461,21 +447,9 @@ export namespace dhooks
 	DHOOKS_SET_RETURN_ADDRESS_IMPL(_THIS_,addr1,_ReturnAddress())\
 	DHOOKS_SET_RETURN_ADDRESS_IMPL(_THIS_,addr2,_AddressOfReturnAddress())
 
-namespace dhooks
+export namespace dhooks
 {
-	template <typename T, size_t ...I>
-	auto shift_left_impl(T& tpl, std::index_sequence<I...>)
-	{
-		return std::forward_as_tuple(reinterpret_cast<std::tuple_element_t<I + 1, T>&>(std::get<I>(tpl)).unhide( )...);
-	}
-
-	template <typename ...T>
-	auto shift_left(std::tuple<dhooks::hiddent_type<T>...>&& tpl)
-	{
-		return shift_left_impl(tpl, std::make_index_sequence<sizeof...(T) - 1>( ));
-	}
-
-	export template<typename T>
+	template<typename T>
 		requires(std::is_member_function_pointer_v<T>)
 	void* pointer_to_class_method(T fn)
 	{
@@ -483,65 +457,111 @@ namespace dhooks
 		return ptr;
 	}
 
-	template<typename T, typename Fn, size_t UniqueIdx, typename Ret, call_conversion CallCvs, typename C, typename ...Args>
-	Ret callback_proxy_impl(T* thisptr, Fn callback, hook_holder_impl<UniqueIdx, Ret, CallCvs, C, Args...>* instance, hiddent_type<Args> ...args)
-	{
-		if constexpr (std::is_class_v<C>)
-		{
-			instance->set_object_instance(thisptr);
-			return std::invoke(
-				callback,
-				instance, args.unhide( )...
-			);
-		}
-		else
-		{
-			hiddent_type<void*> fake_thisptr = thisptr;
-			return std::apply(
-				callback,
-				std::tuple_cat(std::tuple(instance), shift_left(std::tuple(fake_thisptr, args...)))
-			);
-		}
-	}
+#define DHOOKS_EMPTY_ARG
 
-#define DHOOKS_HOOK_HOLDER_IMPL(_CALL_CVS_)\
-	export template <size_t UniqueIdx, typename Ret, typename Arg1, typename ...Args>\
-	struct hook_holder<UniqueIdx, Ret, call_conversion::_CALL_CVS_##__, Arg1, Args...>\
-	: hook_holder_impl<UniqueIdx, Ret, call_conversion::_CALL_CVS_##__, Arg1, Args...>\
+#define DHOOKS_HOOK_HOLDER_EXTRACTOR_member pointer_to_class_method
+#define DHOOKS_HOOK_HOLDER_EXTRACTOR_global DHOOKS_EMPTY_ARG
+
+#define DHOOKS_HOOK_HOLDER_PROXY_BODY_member\
+	inst->set_object_instance(this);
+#define DHOOKS_HOOK_HOLDER_PROXY_BODY_global\
+	(void)0
+
+#ifdef _DEBUG
+#define DHOOKS_DEBUG_ONLY(...) _VA_ARGS__
+#else
+#define DHOOKS_DEBUG_ONLY(...) (void)0
+#endif
+
+#define DHOOKS_HOOK_HOLDER_ARG_TEMPLATE_member typename Arg1,
+#define DHOOKS_HOOK_HOLDER_ARG_member Arg1
+
+#define DHOOKS_HOOK_HOLDER_ARG_TEMPLATE_global DHOOKS_EMPTY_ARG
+#define DHOOKS_HOOK_HOLDER_ARG_global void
+
+#define DHOOKS_HOOK_HOLDER_IMPl2(_NAME_,_CALL_CVS_,_PROXY_SPECS_)\
+	template <DHOOKS_HOOK_HOLDER_HEAD_TEMPLATE_ARGS, DHOOKS_HOOK_HOLDER_ARG_TEMPLATE_##_NAME_ typename ...Args>\
+	struct hook_holder<DHOOKS_HOOK_HOLDER_HEAD_ARGS, call_conversion::_CALL_CVS_##__, DHOOKS_HOOK_HOLDER_ARG_##_NAME_, Args...> :\
+	  return_address_getter,\
+	  original_function<Ret, call_conversion::_CALL_CVS_##__, DHOOKS_HOOK_HOLDER_ARG_##_NAME_, Args...>,\
+	  hook_holder_data,\
+	  hook_callback<Ret, Args...>\
 	{\
-		hook_holder()\
+		hook_holder( )\
 		{\
-			this->set_replace_method(pointer_to_class_method(&hook_holder::callback_proxy));\
+			auto& inst = hook_holder::instance( );\
+			assertm(inst == nullptr, "instance already created!");\
+			inst = this;\
+			this->set_replace_method(DHOOKS_HOOK_HOLDER_EXTRACTOR_##_NAME_(&hook_holder::callback_proxy));\
 		}\
-		Ret __##_CALL_CVS_ callback_proxy(hiddent_type<Args> ...args)\
+		hook_holder(hook_holder&&other) noexcept\
 		{\
-			auto inst = this->instance( );\
-			DHOOKS_SET_RETURN_ADDRESS(inst);\
-			return callback_proxy_impl(this,&hook_holder::callback_impl,inst,args...);\
+			using std::swap;\
+			swap<return_address_getter>(*this,other);\
+			swap<original_function<Ret, call_conversion::_CALL_CVS_##__, DHOOKS_HOOK_HOLDER_ARG_##_NAME_, Args...>>(*this,other);\
+			swap<hook_holder_data>(*this,other);\
+			hook_holder::instance( ) = this;\
+		}\
+		~hook_holder( ) override\
+		{\
+			auto& inst = hook_holder::instance( );\
+			if(inst == this)\
+				inst = nullptr;\
+		}\
+	private:\
+		_PROXY_SPECS_ Ret __##_CALL_CVS_ callback_proxy(Args ...args)\
+		{\
+			auto inst = hook_holder::instance( );\
+			assertm(inst != nullptr, "instance not set!");\
+			DHOOKS_HOOK_HOLDER_PROXY_BODY_##_NAME_;\
+			inst->callback(std::forward<Args>(args)...);\
+			if (!inst->have_return_value( ))\
+				inst->call_original_and_store_result(std::forward<Args>(args)...); \
+			inst->process_disable_request( ); \
+			return std::move(*inst).get_return_value( ); \
+		}\
+		static auto& instance( )\
+		{\
+			static hook_holder* obj = nullptr; \
+			return obj; \
 		}\
 	};
 
-	DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_HOOK_HOLDER_IMPL);
-
-#define DHOOKS_HOOK_HOLDER_MEMBER_IMPL(_CALL_CVS_,_CONST_)\
-	template <size_t UniqueIdx, typename Ret, typename C, typename ...Args>\
-	hook_holder<UniqueIdx, Ret, call_conversion::_CALL_CVS_##__, C, Args...>\
-	select_hook_holder_impl(Ret (__##_CALL_CVS_ C::*fn)(Args ...) _CONST_) { return {}; }
+	//----
 
 #define DHOOKS_HOOK_HOLDER_MEMBER(_CALL_CVS_)\
-	DHOOKS_HOOK_HOLDER_MEMBER_IMPL(_CALL_CVS_,)\
-	DHOOKS_HOOK_HOLDER_MEMBER_IMPL(_CALL_CVS_,const)
+	DHOOKS_HOOK_HOLDER_IMPl2(member,_CALL_CVS_,DHOOKS_EMPTY_ARG)
 
 	DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_HOOK_HOLDER_MEMBER);
 
-#define DHOOKS_HOOK_HOLDER_STATIC(_CALL_CVS_)\
-	template <size_t UniqueIdx, typename Ret, typename ...Args>\
-	hook_holder<UniqueIdx, Ret, call_conversion::_CALL_CVS_##__, void, Args...>\
+	//----
+
+#define DHOOKS_HOOK_HOLDER_GLOBAL(_CALL_CVS_)\
+	DHOOKS_HOOK_HOLDER_IMPl2(global,_CALL_CVS_,static)
+
+	DHOOKS_CALL_CVS_HELPER_GLOBAL(DHOOKS_HOOK_HOLDER_GLOBAL);
+
+	//----
+
+#define DHOOKS_HOOK_HOLDER_SELECTOR_MEMBER_IMPL(_CALL_CVS_,_CONST_)\
+	template <DHOOKS_HOOK_HOLDER_HEAD_TEMPLATE_ARGS, typename Arg1, typename ...Args>\
+	hook_holder<DHOOKS_HOOK_HOLDER_HEAD_ARGS, call_conversion::_CALL_CVS_##__, Arg1, Args...>\
+	select_hook_holder_impl(Ret (__##_CALL_CVS_ Arg1::*fn)(Args ...) _CONST_) { return {}; }
+
+#define DHOOKS_HOOK_HOLDER_SELECTOR_MEMBER(_CALL_CVS_)\
+	DHOOKS_HOOK_HOLDER_SELECTOR_MEMBER_IMPL(_CALL_CVS_,DHOOKS_EMPTY_ARG)\
+	DHOOKS_HOOK_HOLDER_SELECTOR_MEMBER_IMPL(_CALL_CVS_,const)
+
+	DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_HOOK_HOLDER_SELECTOR_MEMBER);
+
+#define DHOOKS_HOOK_HOLDER_SELECTOR_GLOBAL(_CALL_CVS_)\
+	template <DHOOKS_HOOK_HOLDER_HEAD_TEMPLATE_ARGS, typename ...Args>\
+	hook_holder<DHOOKS_HOOK_HOLDER_HEAD_ARGS, call_conversion::_CALL_CVS_##__, void, Args...>\
 	select_hook_holder_impl(Ret (__##_CALL_CVS_ *fn)(Args ...)) { return {}; }
 
-	DHOOKS_CALL_CVS_HELPER_STATIC(DHOOKS_HOOK_HOLDER_STATIC);
+	DHOOKS_CALL_CVS_HELPER_GLOBAL(DHOOKS_HOOK_HOLDER_SELECTOR_GLOBAL);
 
-	export template<typename Fn, size_t UniqueIdx = 0>
-		using select_hook_holder = decltype(select_hook_holder_impl<UniqueIdx>(std::declval<Fn>( )));
+	template<typename Fn, size_t UniqueIdx = 0>
+	using select_hook_holder = decltype(select_hook_holder_impl<UniqueIdx>(std::declval<Fn>( )));
 }
 
