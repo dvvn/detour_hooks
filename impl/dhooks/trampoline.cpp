@@ -34,7 +34,7 @@ bool trampoline2::fix_page_protection( )
 	{
 		try
 		{
-			old_protection_ = {block, PAGE_EXECUTE_READWRITE};
+			old_protection_ = {block.data( ),block.size( ), PAGE_EXECUTE_READWRITE};
 		}
 		catch (const std::exception&)
 		{
@@ -53,9 +53,9 @@ bool trampoline2::create( )
 		return 0;
 	if (!detour)
 		return 0;
-	if (!nstd::mem::block(target, sizeof(size_t) + 1).executable( ))
+	if (!nstd::mem::block((uint8_t*)target, sizeof(size_t) + 1).executable( ))
 		return /*hook_status::ERROR_NOT_EXECUTABLE*/0;
-	if (!nstd::mem::block(detour, sizeof(size_t) + 1).executable( ))
+	if (!nstd::mem::block((uint8_t*)detour, sizeof(size_t) + 1).executable( ))
 		return /*hook_status::ERROR_NOT_EXECUTABLE*/0;
 	if (this->created( ))
 		return 0;
@@ -329,7 +329,7 @@ bool trampoline2::created( )const
 
 void* trampoline2::get_original_method( )const
 {
-	runtime_assert(created());
+	runtime_assert(created( ));
 	auto ptr = trampoline_.data( );
 	return (void*)ptr;
 }
