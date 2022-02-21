@@ -3,7 +3,7 @@ module;
 #include <vector>
 
 export module dhooks:trampoline;
-import nstd.mem;
+import nstd.mem.protect;
 
 export namespace dhooks
 {

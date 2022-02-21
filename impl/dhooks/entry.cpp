@@ -8,7 +8,6 @@ module;
 #include <vector>
 
 module dhooks:entry;
-import nstd.mem;
 
 using namespace dhooks;
 

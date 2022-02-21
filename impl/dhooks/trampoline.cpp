@@ -15,6 +15,7 @@ module;
 #include <vector>
 
 module dhooks:trampoline;
+import nstd.mem.block;
 
 using namespace dhooks;
 
