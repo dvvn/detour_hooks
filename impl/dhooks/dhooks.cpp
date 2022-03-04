@@ -12,7 +12,8 @@ hook_holder_data::hook_holder_data( ) = default;
 
 hook_holder_data::hook_holder_data(hook_holder_data && other)noexcept
 {
-	*this = std::move(other);
+	entry_ = std::move(other.entry_);
+	disable_after_call_ = other.disable_after_call_;
 }
 
 hook_holder_data& hook_holder_data::operator=(hook_holder_data && other)noexcept
@@ -73,13 +74,13 @@ bool hook_holder_data::enabled( ) const
 	return this->hooked( ) && entry_.enabled;
 }
 
-void hook_holder_data::set_target_method(void* fn)
+void hook_holder_data::set_target_method_impl(void* fn)
 {
 	runtime_assert(!entry_.target || !entry_.enabled);
 	entry_.target = fn;
 }
 
-void hook_holder_data::set_replace_method(void* fn)
+void hook_holder_data::set_replace_method_impl(void* fn)
 {
 	runtime_assert(!entry_.detour || !entry_.enabled);
 	entry_.detour = fn;
@@ -87,5 +88,10 @@ void hook_holder_data::set_replace_method(void* fn)
 
 bool hook_holder_data::process_disable_request( )
 {
-	return disable_after_call_ && this->disable( );
+	if (!disable_after_call_)
+		return false;
+
+	const auto lock = std::scoped_lock(mtx_);
+	disable_after_call_ = false;
+	return entry_.disable( );
 }
