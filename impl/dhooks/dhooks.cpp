@@ -2,11 +2,19 @@ module;
 
 #include <nstd/runtime_assert.h>
 
-#include "includes.h"
+#include <mutex>
 
 module dhooks;
 
 using namespace dhooks;
+
+template<typename T>
+void swap(std::atomic<T>& l, std::atomic<T>& r)
+{
+	T tmp = l;
+	l = r;
+	r = tmp;
+}
 
 hook_holder_data::hook_holder_data( ) = default;
 

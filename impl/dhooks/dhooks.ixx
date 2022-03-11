@@ -46,7 +46,6 @@ auto get_func_from_vtable(ClassT* instance, size_t index)
 template<typename Out, typename In>
 Out force_cast(In in)
 {
-	static_assert(sizeof(Out) == sizeof(void*), __FUNCSIG__": Unable to force cast!");
 	Out out;
 	reinterpret_cast<void*&>(out) = reinterpret_cast<void*&>(in);
 	return out;
@@ -232,7 +231,7 @@ public:
 		if constexpr (std::is_copy_constructible_v<Ret>)
 			return value_;
 		else
-			return std::move(*this).get( );
+			return std::move(*this).get_return_value( );
 	}
 };
 
@@ -327,42 +326,7 @@ void* to_void_ptr(T obj)
 	else if constexpr (std::is_member_function_pointer_v<T>)
 		return force_cast<void*>(obj);
 	else
-	{
-		static_assert(std::is_pointer_v<T>);
 		return static_cast<void*>(obj);
-	}
-}
-
-template<typename T>
-class simple_atomic :std::atomic<T>
-{
-public:
-	simple_atomic( ) = default;
-
-	simple_atomic& operator=(const T value)noexcept
-	{
-		this->store(value, std::memory_order_relaxed);
-		return *this;
-	}
-
-	simple_atomic& operator=(const simple_atomic& other)
-	{
-		this->store(other);
-		return *this;
-	}
-
-	operator T( )const
-	{
-		return this->load(std::memory_order_relaxed);
-	}
-};
-
-template<typename T>
-void swap(simple_atomic<T>& l, simple_atomic<T>& r)
-{
-	T tmp = l;
-	l = r;
-	r = tmp;
 }
 
 export namespace dhooks
@@ -371,7 +335,7 @@ export namespace dhooks
 	{
 		mutable std::mutex mtx_;
 		hook_entry entry_;
-		simple_atomic<bool> disable_after_call_;
+		/*std::atomic<bool>*/bool disable_after_call_ = false;
 
 	protected:
 		hook_holder_data( );
