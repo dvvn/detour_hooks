@@ -175,14 +175,14 @@ auto generate_function_type( )
 	{
 		DHOOKS_CALL_CVS_HELPER_ALL(DHOOKS_GENERATE_MEMBER_FUNC)
 		{
-			static_assert(false, __FUNCSIG__": unknown member function type");
+			assert("unknown member function type");
 		}
 	}
 	else
 	{
 		DHOOKS_CALL_CVS_HELPER_GLOBAL(DHOOKS_GENERATE_GLOBAL_FUNC)
 		{
-			static_assert(false, __FUNCSIG__": unknown global function type");
+			assert("unknown global function type");
 		}
 	}
 }
