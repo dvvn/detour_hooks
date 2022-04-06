@@ -5,8 +5,8 @@ module;
 #include <array>
 #include <cassert>
 
-export module dhooks;
-import :entry;
+export module dhooks.wrapper;
+import dhooks.entry;
 
 #ifndef assertm
 #define assertm(exp, msg) assert(((void)msg, exp))
@@ -318,17 +318,6 @@ public:
 	}
 };
 
-template<typename T>
-void* to_void_ptr(T obj)
-{
-	if constexpr (std::invocable<T>)
-		return to_void_ptr(std::invoke(obj));
-	else if constexpr (std::is_member_function_pointer_v<T>)
-		return force_cast<void*>(obj);
-	else
-		return static_cast<void*>(obj);
-}
-
 export namespace dhooks
 {
 	class hook_holder_data : protected virtual original_func_setter
@@ -344,18 +333,13 @@ export namespace dhooks
 		hook_holder_data(hook_holder_data&& other)noexcept;
 		hook_holder_data& operator=(hook_holder_data&& other)noexcept;
 
-		bool hook( );
-
-		bool enable( );
-		bool disable( );
+		virtual bool hook( );
+		virtual bool enable( );
+		virtual bool disable( );
 		void request_disable( );
 
 		bool hooked( ) const;
 		bool enabled( ) const;
-
-	private:
-		void set_target_method_impl(void* fn);
-		void set_replace_method_impl(void* fn);
 
 	protected:
 		bool process_disable_request( );
@@ -363,12 +347,12 @@ export namespace dhooks
 		template<typename T>
 		void set_target_method(T source)
 		{
-			set_target_method_impl(to_void_ptr(source));
+			entry_.set_target_method(source);
 		}
 		template<typename T>
 		void set_replace_method(T source)
 		{
-			set_replace_method_impl(to_void_ptr(source));
+			entry_.set_replace_method(source);
 		}
 	};
 

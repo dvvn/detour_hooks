@@ -4,7 +4,7 @@ module;
 
 #include <mutex>
 
-module dhooks;
+module dhooks.wrapper;
 
 using namespace dhooks;
 
@@ -79,19 +79,7 @@ bool hook_holder_data::hooked( ) const
 
 bool hook_holder_data::enabled( ) const
 {
-	return this->hooked( ) && entry_.enabled;
-}
-
-void hook_holder_data::set_target_method_impl(void* fn)
-{
-	runtime_assert(!entry_.target || !entry_.enabled);
-	entry_.target = fn;
-}
-
-void hook_holder_data::set_replace_method_impl(void* fn)
-{
-	runtime_assert(!entry_.detour || !entry_.enabled);
-	entry_.detour = fn;
+	return this->hooked( ) && entry_.enabled();
 }
 
 bool hook_holder_data::process_disable_request( )
