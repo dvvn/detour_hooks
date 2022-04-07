@@ -9,7 +9,7 @@ import nstd.mem.protect;
 
 export namespace dhooks
 {
-	class hook_entry final
+	class hook_entry
 	{
 	public:
 		hook_entry( );

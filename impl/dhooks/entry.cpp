@@ -514,7 +514,7 @@ bool hook_entry::disable( )
 
 	std::copy(target_backup_.begin( ), target_backup_.end( ), mem.block.data( ));
 	enabled_ = false;
-	return false;
+	return true;
 }
 
 void* hook_entry::get_original_method( ) const
