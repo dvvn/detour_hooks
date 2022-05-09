@@ -2,9 +2,7 @@ module;
 
 #include <dhooks/hde/include.h>
 
-
 #include <nstd/runtime_assert.h>
-#include <nstd/mem/block_includes.h>
 
 #include <Windows.h>
 
@@ -15,14 +13,16 @@ import nstd.mem.block;
 
 using namespace dhooks;
 
+#if 1
+#define VALIDATE_SIZE(...)
+#else
 template<typename ...Ts>
-constexpr size_t _Get_size( )
+constexpr size_t _Get_size( ) noexcept
 {
 	return (sizeof(Ts) + ...);
 }
-
 #define VALIDATE_SIZE(_NAME_,...) static_assert(sizeof(_NAME_) == _Get_size<__VA_ARGS__>( ))
-
+#endif
 #pragma pack(push, 1)
 
 // 8-bit relative jump.
@@ -161,7 +161,7 @@ bool hook_entry::create( ) runtime_assert_noexcept
 		0x70, 0x0E,             // 7* 0E:         J** +16
 		0xFF, 0x25, 0x00000000, // FF25 00000000: JMP [RIP+6]
 		0x0000000000000000ULL   // Absolute destination address
-};
+	};
 #else
 	CALL_REL call = {
 			0xE8,      // E8 xxxxxxxx: CALL +5+xxxxxxxx
@@ -408,9 +408,7 @@ bool hook_entry::create( ) runtime_assert_noexcept
 #endif
 
 	//correct trampoline memory access
-#ifdef NSTD_MEM_BLOCK_CHECK_CUSTOM_FLAGS
 	if(!nstd::mem::block(trampoline_.data( ), trampoline_.size( )).have_flags(PAGE_EXECUTE_READWRITE))
-#endif
 	{
 		runtime_assert(!trampoline_protection_.has_value( ), "Trampoline memory protection already fixed");
 		trampoline_protection_ = {trampoline_.data( ), trampoline_.size( ), PAGE_EXECUTE_READWRITE};
@@ -425,7 +423,7 @@ bool hook_entry::create( ) runtime_assert_noexcept
 		target_backup_.assign(target_ptr, target_ptr + sizeof(JMP_REL));
 
 	return true;
-	}
+}
 
 bool hook_entry::created( ) const noexcept
 {
@@ -479,9 +477,7 @@ static prepared_memory _Prepare_memory(void* target, bool patch_above) runtime_a
 	//todo: wait if not readable
 	//-----
 
-#ifdef NSTD_MEM_BLOCK_CHECK_CUSTOM_FLAGS
 	if(!mem.block.have_flags(PAGE_EXECUTE_READWRITE))
-#endif
 	{
 		mem.protect = {target_ptr,target_ptr_size,PAGE_EXECUTE_READWRITE};
 		runtime_assert(mem.protect.has_value( ));
