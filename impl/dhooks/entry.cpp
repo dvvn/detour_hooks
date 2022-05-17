@@ -1,6 +1,8 @@
 module;
 
-#include <dhooks/hde/include.h>
+#define NOMINMAX
+
+#include <hde.h>
 
 #include <nstd/runtime_assert.h>
 
@@ -17,7 +19,7 @@ using namespace dhooks;
 #define VALIDATE_SIZE(...)
 #else
 template<typename ...Ts>
-constexpr size_t _Get_size( ) noexcept
+constexpr size_t _Get_size() noexcept
 {
 	return (sizeof(Ts) + ...);
 }
@@ -90,11 +92,11 @@ VALIDATE_SIZE(JCC_ABS, uint8_t[4], uint32_t, uint64_t);
 
 //----------------------
 
-hook_entry::hook_entry( ) = default;
+hook_entry::hook_entry() = default;
 
-hook_entry::~hook_entry( )
+hook_entry::~hook_entry()
 {
-	disable( );
+	disable();
 }
 
 hook_entry::hook_entry(hook_entry && other) noexcept = default;
@@ -104,23 +106,23 @@ hook_entry& hook_entry::operator=(hook_entry && other) noexcept = default;
 template<typename T>
 static nstd::mem::block _To_mem_block(T * ptr) noexcept
 {
-	return {reinterpret_cast<uint8_t*>(ptr), std::max(sizeof(uintptr_t), sizeof(T))};
+	return { reinterpret_cast<uint8_t*>(ptr), std::max(sizeof(uintptr_t), sizeof(T)) };
 }
 
 static nstd::mem::block _To_mem_block(void* ptr) noexcept
 {
-	return {reinterpret_cast<uint8_t*>(ptr), sizeof(uintptr_t)};
+	return { reinterpret_cast<uint8_t*>(ptr), sizeof(uintptr_t) };
 }
 
 static nstd::mem::block _To_mem_block(const function_getter getter) noexcept
 {
-	return {reinterpret_cast<uint8_t*>(getter.get( )), getter.size( )};
+	return { reinterpret_cast<uint8_t*>(getter.get()), getter.size() };
 }
 
 template<typename T>
 static nstd::mem::block _To_mem_block(T & rng) noexcept
 {
-	return {reinterpret_cast<uint8_t*>(rng.data( )), rng.size( ) * sizeof(T::value_type)};
+	return { reinterpret_cast<uint8_t*>(rng.data()), rng.size() * sizeof(T::value_type) };
 }
 
 //template<class T>
@@ -129,22 +131,22 @@ static nstd::mem::block _To_mem_block(T & rng) noexcept
 //	return _To_mem_block(obj).have_flags(flags);
 //}
 
-bool hook_entry::create( ) runtime_assert_noexcept
+bool hook_entry::create() runtime_assert_noexcept
 {
-	if(created( ))
+	if (created())
 		return 0;
-	if(!target_)
+	if (!target_)
 		return 0;
-	if(!detour_)
+	if (!detour_)
 		return 0;
-	if(target_.get( ) == detour_.get( ))
+	if (target_.get() == detour_.get())
 		return /*hook_status::ERROR_UNSUPPORTED_FUNCTION*/0;
 	/*if(target_.size( ) != detour_.size( ))
 		return 0;*/
 
-	if(!_To_mem_block(target_).executable( ))
+	if (!_To_mem_block(target_).executable())
 		return /*hook_status::ERROR_NOT_EXECUTABLE*/0;
-	if(!_To_mem_block(detour_).executable( ))
+	if (!_To_mem_block(detour_).executable())
 		return /*hook_status::ERROR_NOT_EXECUTABLE*/0;
 
 #if defined(_M_X64) || defined(__x86_64__)
@@ -187,16 +189,16 @@ bool hook_entry::create( ) runtime_assert_noexcept
 
 	do
 	{
-		hde::HDE_data hs;
+		HDE_DATA hs;
 		uint8_t copy_size = 0;
 		ULONG_PTR new_inst;
-		const auto old_inst = reinterpret_cast<ULONG_PTR>(target_.get( )) + old_pos;
+		const auto old_inst = reinterpret_cast<ULONG_PTR>(target_.get()) + old_pos;
 		//const address old_inst = old_pos ? address(target_) + old_pos : target_;
 
 		// ReSharper disable once CppInconsistentNaming
 		const auto _Set_copy_size = [&](uint8_t size)
 		{
-			if(copy_size < size)
+			if (copy_size < size)
 			{
 				const auto size_diff = size - copy_size;
 				/*const auto pad       = [&]( )-> size_t
@@ -209,19 +211,19 @@ bool hook_entry::create( ) runtime_assert_noexcept
 						return estimate_size % delim;
 					return 0;
 				}( );*/
-				trampoline_.insert(std::next(trampoline_.begin( ), new_pos + copy_size), size_diff /*+ pad*/, -1);
+				trampoline_.insert(std::next(trampoline_.begin(), new_pos + copy_size), size_diff /*+ pad*/, -1);
 
-				new_inst = reinterpret_cast<ULONG_PTR>(trampoline_.data( )) + new_pos;
+				new_inst = reinterpret_cast<ULONG_PTR>(trampoline_.data()) + new_pos;
 			}
 			copy_size = size;
 		};
 
-		_Set_copy_size(hde::_HDE_disasm(reinterpret_cast<void*>(old_inst), &hs));
-		if(hs.flags & hde::F_ERROR)
+		_Set_copy_size(HDE_DISASM(reinterpret_cast<void*>(old_inst), &hs));
+		if (hs.flags & F_ERROR)
 			return false;
 
 		auto copy_src = reinterpret_cast<void*>(old_inst);
-		if(old_pos >= sizeof(JMP_REL))
+		if (old_pos >= sizeof(JMP_REL))
 		{
 			copy_src = &jmp;
 			_Set_copy_size(sizeof(decltype(jmp)));
@@ -237,7 +239,7 @@ bool hook_entry::create( ) runtime_assert_noexcept
 			finished = true;
 		}
 #if defined(_M_X64) || defined(__x86_64__)
-		else if((hs.modrm & 0xC7) == 0x05)
+		else if ((hs.modrm & 0xC7) == 0x05)
 		{
 			// Instructions using RIP relative addressing. (ModR/M = 00???101B)
 
@@ -253,11 +255,11 @@ bool hook_entry::create( ) runtime_assert_noexcept
 			*pRelAddr = static_cast<uint32_t>(old_inst + hs.len + static_cast<INT32>(hs.disp.disp32) - (new_inst + hs.len));
 
 			// Complete the function if JMP (FF /4).
-			if(hs.opcode == 0xFF && hs.modrm_reg == 4)
+			if (hs.opcode == 0xFF && hs.modrm_reg == 4)
 				finished = true;
 		}
 #endif
-		else if(hs.opcode == 0xE8)
+		else if (hs.opcode == 0xE8)
 		{
 			copy_src = &call;
 			_Set_copy_size(sizeof(decltype(call)));
@@ -270,20 +272,20 @@ bool hook_entry::create( ) runtime_assert_noexcept
 			call.operand = static_cast<uint32_t>(dest - (new_inst + copy_size));
 #endif
 		}
-		else if((hs.opcode & 0xFD) == 0xE9)
+		else if ((hs.opcode & 0xFD) == 0xE9)
 		{
 			// Direct relative JMP (EB or E9)
 			auto dest = old_inst + hs.len;
 
-			if(hs.opcode == 0xEB) // isShort jmp
+			if (hs.opcode == 0xEB) // isShort jmp
 				dest += static_cast<INT8>(hs.imm.imm8);
 			else
 				dest += static_cast<INT32>(hs.imm.imm32);
 
 			// Simply copy an internal jump.
-			if(reinterpret_cast<ULONG_PTR>(target_.get( )) <= dest && dest < reinterpret_cast<ULONG_PTR>(target_.get( )) + sizeof(JMP_REL))
+			if (reinterpret_cast<ULONG_PTR>(target_.get()) <= dest && dest < reinterpret_cast<ULONG_PTR>(target_.get()) + sizeof(JMP_REL))
 			{
-				if(jmp_dest < dest)
+				if (jmp_dest < dest)
 					jmp_dest = dest;
 			}
 			else
@@ -301,12 +303,12 @@ bool hook_entry::create( ) runtime_assert_noexcept
 				finished = old_inst >= jmp_dest;
 			}
 		}
-		else if((hs.opcode & 0xF0) == 0x70 || (hs.opcode & 0xFC) == 0xE0 || (hs.opcode2 & 0xF0) == 0x80)
+		else if ((hs.opcode & 0xF0) == 0x70 || (hs.opcode & 0xFC) == 0xE0 || (hs.opcode2 & 0xF0) == 0x80)
 		{
 			// Direct relative Jcc
 			auto dest = old_inst + hs.len;
 
-			if( // Jcc
+			if ( // Jcc
 				(hs.opcode & 0xF0) == 0x70 ||
 				// LOOPNZ/LOOPZ/LOOP/JECXZ
 				(hs.opcode & 0xFC) == 0xE0)
@@ -315,12 +317,12 @@ bool hook_entry::create( ) runtime_assert_noexcept
 				dest += static_cast<INT32>(hs.imm.imm32);
 
 			// Simply copy an internal jump.
-			if(reinterpret_cast<ULONG_PTR>(target_.get( )) <= dest && dest < reinterpret_cast<ULONG_PTR>(target_.get( )) + sizeof(JMP_REL))
+			if (reinterpret_cast<ULONG_PTR>(target_.get()) <= dest && dest < reinterpret_cast<ULONG_PTR>(target_.get()) + sizeof(JMP_REL))
 			{
-				if(jmp_dest < dest)
+				if (jmp_dest < dest)
 					jmp_dest = dest;
 			}
-			else if((hs.opcode & 0xFC) == 0xE0)
+			else if ((hs.opcode & 0xFC) == 0xE0)
 			{
 				// LOOPNZ/LOOPZ/LOOP/JCXZ/JECXZ to the outside are not supported.
 				return false;
@@ -341,7 +343,7 @@ bool hook_entry::create( ) runtime_assert_noexcept
 #endif
 			}
 		}
-		else if((hs.opcode & 0xFE) == 0xC2)
+		else if ((hs.opcode & 0xFE) == 0xC2)
 		{
 			// RET (C2 or C3)
 
@@ -350,16 +352,16 @@ bool hook_entry::create( ) runtime_assert_noexcept
 		}
 
 		// Can't alter the instruction length in a branch.
-		if(old_inst < jmp_dest && copy_size != hs.len)
+		if (old_inst < jmp_dest && copy_size != hs.len)
 			return false;
 
 #if 0
 		// Trampoline function is too large.
-		if(new_pos + copy_size > buffer_size( ))
+		if (new_pos + copy_size > buffer_size())
 			return false;
 
 		// Trampoline function has too many instructions.
-		if(ct.ips_count >= /*ct.old_ips.size( )*/sizeof(ips_type))
+		if (ct.ips_count >= /*ct.old_ips.size( )*/sizeof(ips_type))
 			return false;
 #endif
 
@@ -373,24 +375,23 @@ bool hook_entry::create( ) runtime_assert_noexcept
 
 		new_pos += copy_size;
 		old_pos += hs.len;
-	}
-	while(!finished);
+	} while (!finished);
 
-	const auto target_ptr = static_cast<uint8_t*>(target_.get( ));
+	const auto target_ptr = static_cast<uint8_t*>(target_.get());
 
 	// Is there enough place for a long jump?
-	if(old_pos < sizeof(JMP_REL) && !nstd::mem::block(target_ptr + old_pos, sizeof(JMP_REL) - old_pos).code_padding( ))
+	if (old_pos < sizeof(JMP_REL) && !nstd::mem::block(target_ptr + old_pos, sizeof(JMP_REL) - old_pos).code_padding())
 	{
 		// Is there enough place for a short jump?
-		if(old_pos < sizeof(JMP_REL_SHORT) && !nstd::mem::block(target_ptr + old_pos, sizeof(JMP_REL_SHORT) - old_pos).code_padding( ))
+		if (old_pos < sizeof(JMP_REL_SHORT) && !nstd::mem::block(target_ptr + old_pos, sizeof(JMP_REL_SHORT) - old_pos).code_padding())
 			return false;
 
-		const nstd::mem::block target_rel = {target_ptr - sizeof(JMP_REL), sizeof(JMP_REL)};
+		const nstd::mem::block target_rel = { target_ptr - sizeof(JMP_REL), sizeof(JMP_REL) };
 
 		// Can we place the long jump above the function?
-		if(!target_rel.executable( ))
+		if (!target_rel.executable())
 			return false;
-		if(!target_rel.code_padding( ))
+		if (!target_rel.code_padding())
 			return false;
 
 		patch_above_ = true;
@@ -400,7 +401,7 @@ bool hook_entry::create( ) runtime_assert_noexcept
 	// Create a relay function.
 	jmp.address = reinterpret_cast<ULONG_PTR>(ct.pDetour);
 
-	ct.pRelay = static_cast<LPBYTE>(trampoline_.data( )) + new_pos;
+	ct.pRelay = static_cast<LPBYTE>(trampoline_.data()) + new_pos;
 	WIP
 		std::memcpy(ct.pRelay, &jmp, sizeof jmp);
 
@@ -408,16 +409,16 @@ bool hook_entry::create( ) runtime_assert_noexcept
 #endif
 
 	//correct trampoline memory access
-	if(!nstd::mem::block(trampoline_.data( ), trampoline_.size( )).have_flags(PAGE_EXECUTE_READWRITE))
+	if (!nstd::mem::block(trampoline_.data(), trampoline_.size()).have_flags(PAGE_EXECUTE_READWRITE))
 	{
-		runtime_assert(!trampoline_protection_.has_value( ), "Trampoline memory protection already fixed");
-		trampoline_protection_ = {trampoline_.data( ), trampoline_.size( ), PAGE_EXECUTE_READWRITE};
-		runtime_assert(trampoline_protection_.has_value( ), "Unable to fix trampoline memory protection");
+		runtime_assert(!trampoline_protection_.has_value(), "Trampoline memory protection already fixed");
+		trampoline_protection_ = { trampoline_.data(), trampoline_.size(), PAGE_EXECUTE_READWRITE };
+		runtime_assert(trampoline_protection_.has_value(), "Unable to fix trampoline memory protection");
 	}
 
 	// Back up the target function.
-	runtime_assert(target_backup_.empty( ));
-	if(patch_above_)
+	runtime_assert(target_backup_.empty());
+	if (patch_above_)
 		target_backup_.assign(target_ptr - sizeof(JMP_REL), target_ptr /*- sizeof(JMP_REL) + sizeof(JMP_REL)*/ + sizeof(JMP_REL_SHORT));
 	else
 		target_backup_.assign(target_ptr, target_ptr + sizeof(JMP_REL));
@@ -425,26 +426,26 @@ bool hook_entry::create( ) runtime_assert_noexcept
 	return true;
 }
 
-bool hook_entry::created( ) const noexcept
+bool hook_entry::created() const noexcept
 {
-	return !trampoline_.empty( );
+	return !trampoline_.empty();
 }
 
-bool hook_entry::enabled( ) const noexcept
+bool hook_entry::enabled() const noexcept
 {
 	return enabled_;
 }
 
 struct prepared_memory
 {
-	prepared_memory( ) = default;
-	~prepared_memory( )
+	prepared_memory() = default;
+	~prepared_memory()
 	{
-		if(block.empty( ))
+		if (block.empty())
 			return;
 
-		protect.restore( );
-		FlushInstructionCache(GetCurrentProcess( ), block.data( ), block.size( ));
+		protect.restore();
+		FlushInstructionCache(GetCurrentProcess(), block.data(), block.size());
 	}
 
 	prepared_memory(const prepared_memory&) = delete;
@@ -465,41 +466,41 @@ static prepared_memory _Prepare_memory(void* target, bool patch_above) runtime_a
 	auto target_ptr = static_cast<uint8_t*>(target);
 	auto target_ptr_size = sizeof(JMP_REL);
 
-	if(patch_above)
+	if (patch_above)
 	{
 		target_ptr -= sizeof(JMP_REL);
 		target_ptr_size += sizeof(JMP_REL_SHORT);
 	}
 
 	prepared_memory mem;
-	mem.block = {target_ptr, target_ptr_size};
+	mem.block = { target_ptr, target_ptr_size };
 
 	//todo: wait if not readable
 	//-----
 
-	if(!mem.block.have_flags(PAGE_EXECUTE_READWRITE))
+	if (!mem.block.have_flags(PAGE_EXECUTE_READWRITE))
 	{
-		mem.protect = {target_ptr,target_ptr_size,PAGE_EXECUTE_READWRITE};
-		runtime_assert(mem.protect.has_value( ));
+		mem.protect = { target_ptr,target_ptr_size,PAGE_EXECUTE_READWRITE };
+		runtime_assert(mem.protect.has_value());
 	}
 
 	return mem;
 }
 
-bool hook_entry::enable( ) runtime_assert_noexcept
+bool hook_entry::enable() runtime_assert_noexcept
 {
-	if(enabled_)
+	if (enabled_)
 		return false;
 	const auto mem = _Prepare_memory(target_, patch_above_);
-	if(mem.block.empty( ))
+	if (mem.block.empty())
 		return false;
 
-	const auto jmp_rel = reinterpret_cast<JMP_REL*>(mem.block.data( ));
+	const auto jmp_rel = reinterpret_cast<JMP_REL*>(mem.block.data());
 	jmp_rel->opcode = 0xE9;
-	jmp_rel->operand = static_cast<UINT32>(static_cast<LPBYTE>(detour_.get( )) - (mem.block.data( ) + sizeof(JMP_REL)));
-	if(patch_above_)
+	jmp_rel->operand = static_cast<UINT32>(static_cast<LPBYTE>(detour_.get()) - (mem.block.data() + sizeof(JMP_REL)));
+	if (patch_above_)
 	{
-		const auto short_jmp = static_cast<JMP_REL_SHORT*>(target_.get( ));
+		const auto short_jmp = static_cast<JMP_REL_SHORT*>(target_.get());
 		short_jmp->opcode = 0xEB;
 		short_jmp->operand = static_cast<UINT8>(0 - (sizeof(JMP_REL_SHORT) + sizeof(JMP_REL)));
 	}
@@ -508,32 +509,32 @@ bool hook_entry::enable( ) runtime_assert_noexcept
 	return true;
 }
 
-bool hook_entry::disable( ) runtime_assert_noexcept
+bool hook_entry::disable() runtime_assert_noexcept
 {
-	if(!enabled_)
+	if (!enabled_)
 		return false;
 	const auto mem = _Prepare_memory(target_, patch_above_);
-	if(mem.block.empty( ))
+	if (mem.block.empty())
 		return false;
 
-	std::copy(target_backup_.begin( ), target_backup_.end( ), mem.block.data( ));
+	std::copy(target_backup_.begin(), target_backup_.end(), mem.block.data());
 	enabled_ = false;
 	return true;
 }
 
-void* hook_entry::get_original_method( ) const runtime_assert_noexcept
+void* hook_entry::get_original_method() const runtime_assert_noexcept
 {
-	runtime_assert(created( ));
-	auto ptr = trampoline_.data( );
+	runtime_assert(created());
+	auto ptr = trampoline_.data();
 	return (void*)ptr;
 }
 
-void* hook_entry::get_target_method( ) const noexcept
+void* hook_entry::get_target_method() const noexcept
 {
 	return target_;
 }
 
-void* hook_entry::get_replace_method( ) const noexcept
+void* hook_entry::get_replace_method() const noexcept
 {
 	return detour_;
 }
@@ -551,7 +552,3 @@ void hook_entry::set_replace_method(const function_getter getter) runtime_assert
 	runtime_assert(getter != nullptr);
 	detour_ = getter;
 }
-
-
-
-
