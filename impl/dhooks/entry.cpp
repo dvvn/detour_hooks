@@ -2,7 +2,11 @@ module;
 
 #define NOMINMAX
 
-#include <hde.h>
+#ifdef DHOOKS_X64
+#include <hde64.h>
+#else
+#include <hde32.h>
+#endif
 
 #include <nstd/runtime_assert.h>
 
@@ -114,11 +118,6 @@ static nstd::mem::block _To_mem_block(void* ptr) noexcept
 	return { reinterpret_cast<uint8_t*>(ptr), sizeof(uintptr_t) };
 }
 
-static nstd::mem::block _To_mem_block(const function_getter getter) noexcept
-{
-	return { reinterpret_cast<uint8_t*>(getter.get()), getter.size() };
-}
-
 template<typename T>
 static nstd::mem::block _To_mem_block(T & rng) noexcept
 {
@@ -139,17 +138,15 @@ bool hook_entry::create() runtime_assert_noexcept
 		return 0;
 	if (!detour_)
 		return 0;
-	if (target_.get() == detour_.get())
+	if (target_ == detour_)
 		return /*hook_status::ERROR_UNSUPPORTED_FUNCTION*/0;
-	/*if(target_.size( ) != detour_.size( ))
-		return 0;*/
 
 	if (!_To_mem_block(target_).executable())
 		return /*hook_status::ERROR_NOT_EXECUTABLE*/0;
 	if (!_To_mem_block(detour_).executable())
 		return /*hook_status::ERROR_NOT_EXECUTABLE*/0;
 
-#if defined(_M_X64) || defined(__x86_64__)
+#ifdef DHOOKS_X64
 	CALL_ABS call = {
 		0xFF, 0x15, 0x00000002, // FF15 00000002: CALL [RIP+8]
 		0xEB, 0x08,             // EB 08:         JMP +10
@@ -183,16 +180,20 @@ bool hook_entry::create() runtime_assert_noexcept
 	uint8_t new_pos = 0;
 	ULONG_PTR jmp_dest = 0;     // Destination address of an internal jump.
 	bool finished = false; // Is the function completed?
-#if defined(_M_X64) || defined(__x86_64__)
+#ifdef DHOOKS_X64
 	uint8_t instBuf[16];
 #endif
 
 	do
 	{
-		HDE_DATA hs;
+#ifdef DHOOKS_X64
+		hde64s hs;
+#else
+		hde32s hs;
+#endif
 		uint8_t copy_size = 0;
 		ULONG_PTR new_inst;
-		const auto old_inst = reinterpret_cast<ULONG_PTR>(target_.get()) + old_pos;
+		const auto old_inst = reinterpret_cast<ULONG_PTR>(target_) + old_pos;
 		//const address old_inst = old_pos ? address(target_) + old_pos : target_;
 
 		// ReSharper disable once CppInconsistentNaming
@@ -218,7 +219,12 @@ bool hook_entry::create() runtime_assert_noexcept
 			copy_size = size;
 		};
 
-		_Set_copy_size(HDE_DISASM(reinterpret_cast<void*>(old_inst), &hs));
+#ifdef DHOOKS_X64
+		_Set_copy_size(hde64_disasm(reinterpret_cast<void*>(old_inst), &hs));
+#else
+		_Set_copy_size(hde32_disasm(reinterpret_cast<void*>(old_inst), &hs));
+#endif
+
 		if (hs.flags & F_ERROR)
 			return false;
 
@@ -230,7 +236,7 @@ bool hook_entry::create() runtime_assert_noexcept
 
 			// The trampoline function is long enough.
 			// Complete the function with the jump to the target_ function.
-#if defined(_M_X64) || defined(__x86_64__)
+#ifdef DHOOKS_X64
 			jmp.address = old_inst;
 #else
 			jmp.operand = static_cast<uint32_t>(old_inst - (new_inst + copy_size));
@@ -238,7 +244,7 @@ bool hook_entry::create() runtime_assert_noexcept
 
 			finished = true;
 		}
-#if defined(_M_X64) || defined(__x86_64__)
+#ifdef DHOOKS_X64
 		else if ((hs.modrm & 0xC7) == 0x05)
 		{
 			// Instructions using RIP relative addressing. (ModR/M = 00???101B)
@@ -266,7 +272,7 @@ bool hook_entry::create() runtime_assert_noexcept
 
 			// Direct relative CALL
 			const auto dest = old_inst + hs.len + static_cast<INT32>(hs.imm.imm32);
-#if defined(_M_X64) || defined(__x86_64__)
+#ifdef DHOOKS_X64
 			call.address = dest;
 #else
 			call.operand = static_cast<uint32_t>(dest - (new_inst + copy_size));
@@ -283,7 +289,7 @@ bool hook_entry::create() runtime_assert_noexcept
 				dest += static_cast<INT32>(hs.imm.imm32);
 
 			// Simply copy an internal jump.
-			if (reinterpret_cast<ULONG_PTR>(target_.get()) <= dest && dest < reinterpret_cast<ULONG_PTR>(target_.get()) + sizeof(JMP_REL))
+			if (reinterpret_cast<ULONG_PTR>(target_) <= dest && dest < reinterpret_cast<ULONG_PTR>(target_) + sizeof(JMP_REL))
 			{
 				if (jmp_dest < dest)
 					jmp_dest = dest;
@@ -293,7 +299,7 @@ bool hook_entry::create() runtime_assert_noexcept
 				copy_src = &jmp;
 				_Set_copy_size(sizeof(decltype(jmp)));
 
-#if defined(_M_X64) || defined(__x86_64__)
+#ifdef DHOOKS_X64
 				jmp.address = dest;
 #else
 				jmp.operand = static_cast<uint32_t>(dest - (new_inst + copy_size));
@@ -301,8 +307,8 @@ bool hook_entry::create() runtime_assert_noexcept
 
 				// Exit the function If it is not in the branch
 				finished = old_inst >= jmp_dest;
-			}
 		}
+	}
 		else if ((hs.opcode & 0xF0) == 0x70 || (hs.opcode & 0xFC) == 0xE0 || (hs.opcode2 & 0xF0) == 0x80)
 		{
 			// Direct relative Jcc
@@ -317,7 +323,7 @@ bool hook_entry::create() runtime_assert_noexcept
 				dest += static_cast<INT32>(hs.imm.imm32);
 
 			// Simply copy an internal jump.
-			if (reinterpret_cast<ULONG_PTR>(target_.get()) <= dest && dest < reinterpret_cast<ULONG_PTR>(target_.get()) + sizeof(JMP_REL))
+			if (reinterpret_cast<ULONG_PTR>(target_) <= dest && dest < reinterpret_cast<ULONG_PTR>(target_) + sizeof(JMP_REL))
 			{
 				if (jmp_dest < dest)
 					jmp_dest = dest;
@@ -333,7 +339,7 @@ bool hook_entry::create() runtime_assert_noexcept
 				_Set_copy_size(sizeof(decltype(jcc)));
 
 				const uint8_t cond = (hs.opcode != 0x0F ? hs.opcode : hs.opcode2) & 0x0F;
-#if defined(_M_X64) || defined(__x86_64__)
+#ifdef DHOOKS_X64
 				// Invert the condition in x64 mode to simplify the conditional jump logic.
 				jcc.opcode = 0x71 ^ cond;
 				jcc.address = dest;
@@ -375,55 +381,55 @@ bool hook_entry::create() runtime_assert_noexcept
 
 		new_pos += copy_size;
 		old_pos += hs.len;
-	} while (!finished);
+} while (!finished);
 
-	const auto target_ptr = static_cast<uint8_t*>(target_.get());
+const auto target_ptr = static_cast<uint8_t*>(target_);
 
-	// Is there enough place for a long jump?
-	if (old_pos < sizeof(JMP_REL) && !nstd::mem::block(target_ptr + old_pos, sizeof(JMP_REL) - old_pos).code_padding())
-	{
-		// Is there enough place for a short jump?
-		if (old_pos < sizeof(JMP_REL_SHORT) && !nstd::mem::block(target_ptr + old_pos, sizeof(JMP_REL_SHORT) - old_pos).code_padding())
-			return false;
+// Is there enough place for a long jump?
+if (old_pos < sizeof(JMP_REL) && !nstd::mem::block(target_ptr + old_pos, sizeof(JMP_REL) - old_pos).code_padding())
+{
+	// Is there enough place for a short jump?
+	if (old_pos < sizeof(JMP_REL_SHORT) && !nstd::mem::block(target_ptr + old_pos, sizeof(JMP_REL_SHORT) - old_pos).code_padding())
+		return false;
 
-		const nstd::mem::block target_rel = { target_ptr - sizeof(JMP_REL), sizeof(JMP_REL) };
+	const nstd::mem::block target_rel = { target_ptr - sizeof(JMP_REL), sizeof(JMP_REL) };
 
-		// Can we place the long jump above the function?
-		if (!target_rel.executable())
-			return false;
-		if (!target_rel.code_padding())
-			return false;
+	// Can we place the long jump above the function?
+	if (!target_rel.executable())
+		return false;
+	if (!target_rel.code_padding())
+		return false;
 
-		patch_above_ = true;
-	}
+	patch_above_ = true;
+}
 
-#if defined(_M_X64) || defined(__x86_64__)
-	// Create a relay function.
-	jmp.address = reinterpret_cast<ULONG_PTR>(ct.pDetour);
+#ifdef DHOOKS_X64
+// Create a relay function.
+jmp.address = reinterpret_cast<ULONG_PTR>(ct.pDetour);
 
-	ct.pRelay = static_cast<LPBYTE>(trampoline_.data()) + new_pos;
-	WIP
-		std::memcpy(ct.pRelay, &jmp, sizeof jmp);
+ct.pRelay = static_cast<LPBYTE>(trampoline_.data()) + new_pos;
+WIP
+std::memcpy(ct.pRelay, &jmp, sizeof jmp);
 
-	detour_ = ct.pRelay;
+detour_ = ct.pRelay;
 #endif
 
-	//correct trampoline memory access
-	if (!nstd::mem::block(trampoline_.data(), trampoline_.size()).have_flags(PAGE_EXECUTE_READWRITE))
-	{
-		runtime_assert(!trampoline_protection_.has_value(), "Trampoline memory protection already fixed");
-		trampoline_protection_ = { trampoline_.data(), trampoline_.size(), PAGE_EXECUTE_READWRITE };
-		runtime_assert(trampoline_protection_.has_value(), "Unable to fix trampoline memory protection");
-	}
+//correct trampoline memory access
+if (!nstd::mem::block(trampoline_.data(), trampoline_.size()).have_flags(PAGE_EXECUTE_READWRITE))
+{
+	runtime_assert(!trampoline_protection_.has_value(), "Trampoline memory protection already fixed");
+	trampoline_protection_ = { trampoline_.data(), trampoline_.size(), PAGE_EXECUTE_READWRITE };
+	runtime_assert(trampoline_protection_.has_value(), "Unable to fix trampoline memory protection");
+}
 
-	// Back up the target function.
-	runtime_assert(target_backup_.empty());
-	if (patch_above_)
-		target_backup_.assign(target_ptr - sizeof(JMP_REL), target_ptr /*- sizeof(JMP_REL) + sizeof(JMP_REL)*/ + sizeof(JMP_REL_SHORT));
-	else
-		target_backup_.assign(target_ptr, target_ptr + sizeof(JMP_REL));
+// Back up the target function.
+runtime_assert(target_backup_.empty());
+if (patch_above_)
+target_backup_.assign(target_ptr - sizeof(JMP_REL), target_ptr /*- sizeof(JMP_REL) + sizeof(JMP_REL)*/ + sizeof(JMP_REL_SHORT));
+else
+target_backup_.assign(target_ptr, target_ptr + sizeof(JMP_REL));
 
-	return true;
+return true;
 }
 
 bool hook_entry::created() const noexcept
@@ -497,10 +503,10 @@ bool hook_entry::enable() runtime_assert_noexcept
 
 	const auto jmp_rel = reinterpret_cast<JMP_REL*>(mem.block.data());
 	jmp_rel->opcode = 0xE9;
-	jmp_rel->operand = static_cast<UINT32>(static_cast<LPBYTE>(detour_.get()) - (mem.block.data() + sizeof(JMP_REL)));
+	jmp_rel->operand = static_cast<UINT32>(static_cast<LPBYTE>(detour_) - (mem.block.data() + sizeof(JMP_REL)));
 	if (patch_above_)
 	{
-		const auto short_jmp = static_cast<JMP_REL_SHORT*>(target_.get());
+		const auto short_jmp = static_cast<JMP_REL_SHORT*>(target_);
 		short_jmp->opcode = 0xEB;
 		short_jmp->operand = static_cast<UINT8>(0 - (sizeof(JMP_REL_SHORT) + sizeof(JMP_REL)));
 	}
@@ -539,14 +545,14 @@ void* hook_entry::get_replace_method() const noexcept
 	return detour_;
 }
 
-void hook_entry::set_target_method(const function_getter getter) runtime_assert_noexcept
+void hook_entry::set_target_method(void* getter) runtime_assert_noexcept
 {
 	runtime_assert(target_ == nullptr);
 	runtime_assert(getter != nullptr);
 	target_ = getter;
 }
 
-void hook_entry::set_replace_method(const function_getter getter) runtime_assert_noexcept
+void hook_entry::set_replace_method(void* getter) runtime_assert_noexcept
 {
 	runtime_assert(detour_ == nullptr);
 	runtime_assert(getter != nullptr);
