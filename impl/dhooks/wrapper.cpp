@@ -18,13 +18,13 @@ void swap(std::atomic<T>& l, std::atomic<T>& r)
 
 hook_holder_data::hook_holder_data( ) = default;
 
-hook_holder_data::hook_holder_data(hook_holder_data && other)noexcept
+hook_holder_data::hook_holder_data(hook_holder_data&& other)
 {
 	entry_ = std::move(other.entry_);
 	disable_after_call_ = other.disable_after_call_;
 }
 
-hook_holder_data& hook_holder_data::operator=(hook_holder_data && other)noexcept
+hook_holder_data& hook_holder_data::operator=(hook_holder_data&& other)
 {
 	using std::swap;
 	swap(entry_, other.entry_);

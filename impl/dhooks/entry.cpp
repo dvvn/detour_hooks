@@ -22,8 +22,8 @@ using namespace dhooks;
 #if 1
 #define VALIDATE_SIZE(...)
 #else
-template<typename ...Ts>
-constexpr size_t _Get_size() noexcept
+template <typename... Ts>
+constexpr size_t _Get_size()
 {
 	return (sizeof(Ts) + ...);
 }
@@ -103,23 +103,22 @@ hook_entry::~hook_entry()
 	disable();
 }
 
-hook_entry::hook_entry(hook_entry && other) noexcept = default;
-hook_entry& hook_entry::operator=(hook_entry && other) noexcept = default;
+hook_entry::hook_entry(hook_entry&& other) = default;
+hook_entry& hook_entry::operator=(hook_entry&& other) = default;
 
-
-template<typename T>
-static nstd::mem::block _To_mem_block(T * ptr) noexcept
+template <typename T>
+static nstd::mem::block _To_mem_block(T* ptr)
 {
 	return { reinterpret_cast<uint8_t*>(ptr), std::max(sizeof(uintptr_t), sizeof(T)) };
 }
 
-static nstd::mem::block _To_mem_block(void* ptr) noexcept
+static nstd::mem::block _To_mem_block(void* ptr)
 {
 	return { reinterpret_cast<uint8_t*>(ptr), sizeof(uintptr_t) };
 }
 
-template<typename T>
-static nstd::mem::block _To_mem_block(T & rng) noexcept
+template <typename T>
+static nstd::mem::block _To_mem_block(T& rng)
 {
 	return { reinterpret_cast<uint8_t*>(rng.data()), rng.size() * sizeof(T::value_type) };
 }
@@ -130,7 +129,7 @@ static nstd::mem::block _To_mem_block(T & rng) noexcept
 //	return _To_mem_block(obj).have_flags(flags);
 //}
 
-bool hook_entry::create() runtime_assert_noexcept
+bool hook_entry::create()
 {
 	if (created())
 		return 0;
@@ -432,12 +431,12 @@ target_backup_.assign(target_ptr, target_ptr + sizeof(JMP_REL));
 return true;
 }
 
-bool hook_entry::created() const noexcept
+bool hook_entry::created() const
 {
 	return !trampoline_.empty();
 }
 
-bool hook_entry::enabled() const noexcept
+bool hook_entry::enabled() const
 {
 	return enabled_;
 }
@@ -454,9 +453,10 @@ struct prepared_memory
 		FlushInstructionCache(GetCurrentProcess(), block.data(), block.size());
 	}
 
-	prepared_memory(const prepared_memory&) = delete;
-	prepared_memory(prepared_memory&& other) noexcept
-	{
+    prepared_memory(const prepared_memory&) = delete;
+
+    prepared_memory(prepared_memory&& other)
+    {
 		using std::swap;
 		swap(block, other.block);
 		swap(protect, other.protect);
@@ -465,7 +465,8 @@ struct prepared_memory
 	nstd::mem::block block;
 	nstd::mem::protect protect;
 };
-static prepared_memory _Prepare_memory(void* target, bool patch_above) runtime_assert_noexcept
+
+static prepared_memory _Prepare_memory(void* target, bool patch_above)
 {
 	runtime_assert(target != nullptr);
 
@@ -493,7 +494,7 @@ static prepared_memory _Prepare_memory(void* target, bool patch_above) runtime_a
 	return mem;
 }
 
-bool hook_entry::enable() runtime_assert_noexcept
+bool hook_entry::enable()
 {
 	if (enabled_)
 		return false;
@@ -515,7 +516,7 @@ bool hook_entry::enable() runtime_assert_noexcept
 	return true;
 }
 
-bool hook_entry::disable() runtime_assert_noexcept
+bool hook_entry::disable()
 {
 	if (!enabled_)
 		return false;
@@ -528,31 +529,31 @@ bool hook_entry::disable() runtime_assert_noexcept
 	return true;
 }
 
-void* hook_entry::get_original_method() const runtime_assert_noexcept
+void* hook_entry::get_original_method() const
 {
 	runtime_assert(created());
 	auto ptr = trampoline_.data();
 	return (void*)ptr;
 }
 
-void* hook_entry::get_target_method() const noexcept
+void* hook_entry::get_target_method() const
 {
 	return target_;
 }
 
-void* hook_entry::get_replace_method() const noexcept
+void* hook_entry::get_replace_method() const
 {
 	return detour_;
 }
 
-void hook_entry::set_target_method(void* getter) runtime_assert_noexcept
+void hook_entry::set_target_method(void* getter)
 {
 	runtime_assert(target_ == nullptr);
 	runtime_assert(getter != nullptr);
 	target_ = getter;
 }
 
-void hook_entry::set_replace_method(void* getter) runtime_assert_noexcept
+void hook_entry::set_replace_method(void* getter)
 {
 	runtime_assert(detour_ == nullptr);
 	runtime_assert(getter != nullptr);

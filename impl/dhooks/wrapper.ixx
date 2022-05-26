@@ -330,16 +330,16 @@ export namespace dhooks
 		hook_holder_data( );
 
 	public:
-		hook_holder_data(hook_holder_data&& other)noexcept;
-		hook_holder_data& operator=(hook_holder_data&& other)noexcept;
+      hook_holder_data(hook_holder_data&& other);
+      hook_holder_data& operator=(hook_holder_data&& other);
 
-		virtual bool hook( );
-		virtual bool enable( );
-		virtual bool disable( );
-		void request_disable( );
+      virtual bool hook();
+      virtual bool enable();
+      virtual bool disable();
+      void request_disable();
 
-		bool hooked( ) const;
-		bool enabled( ) const;
+      bool hooked() const;
+      bool enabled() const;
 
 	protected:
 		bool process_disable_request( );
@@ -460,4 +460,3 @@ private:\
 	/*template<typename Fn, size_t InstanceIdx = 0>
 	using select_hook_holder_base = select_hook_holder<Fn, InstanceIdx>::hook_base;*/
 }
-
